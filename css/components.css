@@ -186,6 +186,8 @@
     margin-top: 1px;
     line-height: 1.3;
 }
+[data-theme="dark"] .insert-block-name { color: var(--text); }
+[data-theme="dark"] .insert-block-desc { color: var(--text-muted); }
 .insert-no-results {
     text-align: center;
     color: #9ca3af;
@@ -647,7 +649,7 @@
 .confirm-overlay {
     position: fixed;
     inset: 0;
-    z-index: 1900;
+    z-index: 9200;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -893,4 +895,153 @@
     cursor: pointer;
     transition: opacity 0.15s, transform 0.15s;
 }
-.callout-badge:hover { opacity: 0.8; transform: scale(1.05); }
+[data-theme="dark"] .btn-ghost {
+    background: #252d3d;
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
+[data-theme="dark"] .btn-ghost:hover {
+    background: #2d3748;
+    color: var(--text);
+}
+[data-theme="dark"] .btn-primary {
+    background: #3b82f6;
+    color: #ffffff;
+}
+[data-theme="dark"] .btn-primary:hover {
+    background: #2563eb;
+    box-shadow: 0 4px 16px rgba(59,130,246,0.35);
+}
+
+/* ===== RESPONSIVE — modals & components ===== */
+@media (max-width: 768px) {
+    /* Insert modal — slide-up sheet on mobile */
+    .insert-modal-overlay { align-items: flex-end; }
+    .insert-modal {
+        width: 100%;
+        max-width: 100%;
+        border-radius: 20px 20px 0 0;
+        animation: none;
+    }
+    .insert-modal-layout {
+        height: auto;
+        max-height: 55vh;
+    }
+    .insert-cats { width: 130px; }
+
+    /* Edit block modal */
+    .modal {
+        width: calc(100% - 20px);
+        max-height: 88vh;
+        margin: 0 10px;
+    }
+
+    /* Timer */
+    .timer-modal { padding: 24px 20px 28px; }
+    .timer-ring { width: 100px; height: 100px; }
+}
+
+@media (max-width: 480px) {
+    .insert-cats { width: 100px; }
+    .insert-cat-btn { font-size: 11px; padding: 7px 6px; gap: 4px; }
+
+    .md-toolbar { padding: 4px 6px; gap: 2px; }
+    .md-tb-btn { padding: 2px 5px; font-size: 11px; }
+    .md-tb-sep { margin: 0 2px; }
+}
+
+/* ===== BARRE D'OUTILS MARKDOWN (modale d'édition) ===== */
+.md-editor-wrap {
+    display: flex;
+    flex-direction: column;
+}
+
+.md-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 5px 8px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    flex-wrap: wrap;
+}
+
+.md-tb-btn {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 5px;
+    padding: 3px 8px;
+    font-size: 12px;
+    line-height: 1.6;
+    cursor: pointer;
+    color: #374151;
+    font-family: inherit;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    white-space: nowrap;
+}
+.md-tb-btn:hover {
+    background: #eff6ff;
+    border-color: #93c5fd;
+    color: #1d4ed8;
+}
+
+.md-tb-italic { font-style: italic; }
+
+.md-tb-mark {
+    background: #fef9c3;
+    color: #713f12;
+    border-color: #fde68a;
+}
+.md-tb-mark:hover {
+    background: #fef08a;
+    border-color: #ca8a04;
+    color: #713f12;
+}
+
+.md-tb-sep {
+    width: 1px;
+    height: 18px;
+    background: #e2e8f0;
+    margin: 0 3px;
+    flex-shrink: 0;
+}
+
+/* Le textarea qui suit la barre a des coins supérieurs carrés */
+.md-editor-wrap textarea {
+    border-radius: 0 0 8px 8px !important;
+    border-top: none !important;
+}
+
+/* ===== DARK MODE — barre d'outils markdown ===== */
+[data-theme="dark"] .md-toolbar {
+    background: #1a2234;
+    border-color: #2d3748;
+}
+[data-theme="dark"] .md-tb-btn {
+    background: #1e2330;
+    border-color: #2d3748;
+    color: #e2e8f0;
+}
+[data-theme="dark"] .md-tb-btn:hover {
+    background: #1e3a5f;
+    border-color: #3b82f6;
+    color: #93c5fd;
+}
+[data-theme="dark"] .md-tb-mark {
+    background: #422006;
+    color: #fef3c7;
+    border-color: #78350f;
+}
+[data-theme="dark"] .md-tb-mark:hover {
+    background: #78350f;
+    border-color: #d97706;
+    color: #fef9c3;
+}
+[data-theme="dark"] .md-tb-sep {
+    background: #2d3748;
+}
+[data-theme="dark"] .md-editor-wrap textarea {
+    border-top: none !important;
+}

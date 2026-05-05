@@ -168,7 +168,17 @@ export function openModal(type, existingValues = null) {
         if (f.type === 'input') {
             html += `<input id="field-${f.key}" placeholder="${f.placeholder || ''}" value="${String(val).replace(/"/g, '&quot;')}">`;
         } else {
-            html += `<textarea id="field-${f.key}" rows="${f.rows || 3}" placeholder="${f.placeholder || ''}">${val}</textarea>`;
+            html += `<div class="md-editor-wrap">
+                <div class="md-toolbar" role="toolbar" aria-label="Mise en forme">
+                    <button type="button" class="md-tb-btn" onclick="mdWrap('bold','field-${f.key}')" title="Gras — **mot**"><strong>B</strong></button>
+                    <button type="button" class="md-tb-btn md-tb-italic" onclick="mdWrap('italic','field-${f.key}')" title="Italique — *mot*"><em>I</em></button>
+                    <button type="button" class="md-tb-btn md-tb-mark" onclick="mdWrap('mark','field-${f.key}')" title="Surligné — ==mot==">S</button>
+                    <span class="md-tb-sep"></span>
+                    <button type="button" class="md-tb-btn" onclick="mdWrap('link','field-${f.key}')" title="Hyperlien — [texte](url)">🔗</button>
+                    <button type="button" class="md-tb-btn" onclick="mdWrap('vocab','field-${f.key}')" title="Terme de vocabulaire — {terme|définition}">📖</button>
+                </div>
+                <textarea id="field-${f.key}" rows="${f.rows || 3}" placeholder="${f.placeholder || ''}">${val}</textarea>
+            </div>`;
         }
         if (f.hint) html += `<div class="hint">${f.hint}</div>`;
         html += `</div>`;

@@ -60,4 +60,5 @@ body {
     line-height: 1.6;
     overflow: hidden;
     height: 100vh;
+    height: 100dvh; /* fallback-safe: dvh fixes mobile browser chrome */
 }

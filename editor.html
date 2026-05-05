@@ -38,7 +38,6 @@
                 Vue élève
             </button>
         </div>
-        <div class="avatar">PR</div>
         <button class="dark-toggle" id="dark-toggle" onclick="toggleDarkMode()" title="Mode sombre">
             <span class="dark-toggle-track">
                 <span class="dark-toggle-thumb"></span>
@@ -69,6 +68,14 @@
     <span class="block-counter" id="block-counter">6 blocs</span>
     <span class="save-indicator" id="save-indicator"></span>
     <div class="toolbar-sep"></div>
+    <button id="btn-sommaire-mobile" class="toolbar-btn" onclick="toggleSommaireOnMobile()" title="Sommaire">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="17" y2="12"/><line x1="3" y1="18" x2="13" y2="18"/></svg>
+    </button>
+    <div class="toolbar-sep"></div>
+    <button id="btn-presentation" onclick="enterPresentation()" title="Mode présentation plein écran">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        Présentation
+    </button>
 </div>
 
 <!-- LAYOUT -->
@@ -192,6 +199,28 @@
         </div>
     </div>
 </div>
+<!-- PRÉSENTATION OVERLAY -->
+<div id="pres-overlay">
+    <div id="pres-slide-content"></div>
+    <div id="pres-hud">
+        <button class="pres-btn" id="pres-prev" onclick="presGo(-1)" title="Slide précédente (←)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span id="pres-counter">1 / 1</span>
+        <button class="pres-btn" id="pres-next" onclick="presGo(1)" title="Slide suivante (→ ou Espace)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <div class="pres-sep"></div>
+        <button class="pres-btn" id="pres-fullscreen-btn" onclick="presToggleFullscreen()" title="Plein écran (F)">
+            <svg class="icon-enter-fs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            <svg class="icon-exit-fs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+        </button>
+        <button class="pres-btn pres-btn-exit" onclick="exitPresentation()" title="Quitter la présentation (Échap)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1/Sortable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>mermaid.initialize({ startOnLoad: false, theme: 'neutral', fontFamily: 'Inter, sans-serif' });</script>

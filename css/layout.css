@@ -769,10 +769,143 @@
 [data-theme="dark"] .toolbar-sep {
     background: var(--border);
 }
+[data-theme="dark"] .mode-btn.active {
+    background: #3b82f6;
+    color: #ffffff;
+    box-shadow: none;
+}
+[data-theme="dark"] .sidebar-sommaire-item.active .sidebar-sommaire-num {
+    background: #3b82f6;
+    color: #ffffff;
+    border-color: #3b82f6;
+}
 
+
+/* Mobile sommaire button — hidden on desktop */
+#btn-sommaire-mobile { display: none; }
 
 /* ===== RESPONSIVE ===== */
-@media (max-width: 900px) {
+
+/* --- Tablet large (1024px) --- */
+@media (max-width: 1024px) {
+    .sidebar-left { width: 240px; }
+    .content-area { padding: 24px 28px 40px; }
+}
+
+/* --- Tablet / large phone (768px) --- */
+@media (max-width: 768px) {
+    /* Body: use dvh for correct viewport on mobile browsers */
+    body { height: 100dvh; }
+
+    /* Header */
+    .header { padding: 0 14px; gap: 8px; }
+    .header-nav { display: none; }
+    .logo-text span { display: none; }
+
+    /* Toolbar — single compact row */
+    .toolbar { padding: 0 12px; gap: 6px; overflow-x: auto; }
+    .toolbar-sep { display: none; }
+    #btn-toggle-left { display: none; }
+    #btn-sommaire-mobile { display: flex; }
+    .block-counter { display: none; }
+    .save-indicator { display: none; }
+
+    /* Layout height accounts for potential dvh */
+    .layout { height: calc(100dvh - 102px); }
+
+    /* Sidebar hidden */
     .sidebar-left { display: none; }
-    .content-area { padding: 24px 20px; }
+
+    /* Content area */
+    .content-area { padding: 16px 12px 40px; }
+
+    /* Content blocks horizontal margins */
+    .content-inner > .block-wrapper,
+    .content-inner > .block-insert-zone,
+    .content-inner > .page-empty-hint {
+        margin-left: 12px;
+        margin-right: 12px;
+    }
+
+    /* Page header */
+    .page-current-header { padding: 18px 16px; gap: 12px; flex-wrap: wrap; }
+    .pch-title { font-size: 18px; }
+
+    /* Block controls: move from floating aside to inline bottom bar */
+    .block-controls {
+        position: static;
+        flex-direction: row;
+        opacity: 1;
+        transform: none;
+        padding: 4px 8px;
+        background: var(--surface-alt);
+        border-top: 1px solid var(--border);
+        border-radius: 0 0 var(--radius) var(--radius);
+        justify-content: flex-end;
+        right: auto;
+        top: auto;
+    }
+    .block-wrapper.edit-mode:hover .block-controls {
+        transform: none;
+    }
+    [data-theme="dark"] .block-controls {
+        background: #161b27;
+        border-top-color: var(--border);
+    }
+
+    /* Page-break header responsive */
+    .page-break-header { padding: 14px 16px; gap: 12px; }
+    .page-break-title-text { font-size: 16px; }
+
+    /* Sommaire overlay on mobile if opened */
+    .sidebar-left.mobile-open {
+        display: flex;
+        position: fixed;
+        left: 0;
+        top: 56px;
+        bottom: 0;
+        z-index: 500;
+        width: 280px;
+        box-shadow: 4px 0 24px rgba(0,0,0,0.18);
+    }
+}
+
+/* --- Small phone (480px) --- */
+@media (max-width: 480px) {
+    .header { padding: 0 10px; }
+    .logo-text { font-size: 13px; }
+    .mode-btn { padding: 5px 8px; font-size: 11px; gap: 4px; }
+    .mode-btn svg { display: none; }
+
+    .toolbar { padding: 0 8px; }
+    .page-indicator-label { font-size: 11px; }
+
+    .layout { height: calc(100dvh - 102px); }
+
+    .content-area { padding: 10px 6px 40px; }
+
+    .content-inner {
+        border-radius: 12px;
+        min-height: 400px;
+    }
+
+    .content-inner > .block-wrapper,
+    .content-inner > .block-insert-zone,
+    .content-inner > .page-empty-hint {
+        margin-left: 8px;
+        margin-right: 8px;
+    }
+
+    .page-current-header {
+        padding: 12px 12px 14px;
+        border-radius: 12px 12px 0 0;
+        gap: 10px;
+    }
+    .pch-title { font-size: 16px; }
+    .pch-badge { min-width: 38px; padding: 6px 8px; }
+    .pch-num { font-size: 17px; }
+
+    .edit-banner { padding: 8px 12px; font-size: 11px; }
+    .fab-zone { padding: 10px 0 0; }
+    .fab-new-page { padding: 9px 14px; font-size: 12px; }
 }

@@ -622,11 +622,55 @@
     font-size: 13px;
 }
 
-.exercise-header .label {
+.exercise-header .label,
+.exercise-label {
     font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.6px;
+}
+
+.exercise-label.editable {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: 4px;
+    padding: 1px 4px;
+    margin: -1px -4px;
+    transition: background 0.15s;
+}
+.exercise-label.editable:hover {
+    background: rgba(0,0,0,0.06);
+}
+.exercise-label.editing {
+    background: transparent;
+}
+.exo-title-input {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    border: none;
+    border-bottom: 2px solid currentColor;
+    background: transparent;
+    color: inherit;
+    padding: 0 2px;
+    outline: none;
+    min-width: 140px;
+    max-width: 340px;
+    font-family: inherit;
+}
+.exo-edit-icon {
+    opacity: 0.4;
+    flex-shrink: 0;
+    transition: opacity 0.15s;
+}
+.exercise-label.editable:hover .exo-edit-icon {
+    opacity: 0.8;
+}
+[data-theme="dark"] .exercise-label.editable:hover {
+    background: rgba(255,255,255,0.08);
 }
 
 /* ===== BLOCK: EXERCISE QCM ===== */
@@ -1165,7 +1209,9 @@
     transition: all 0.15s;
     color: var(--text-secondary);
 }
-.tf-btn.selected { background: var(--text); color: white; border-color: var(--text); }
+.tf-btn.selected   { background: var(--text); color: white; border-color: var(--text); }
+.tf-btn.tf-correct { background: #16a34a; color: white; border-color: #16a34a; }
+.tf-btn.tf-wrong   { background: #be123c; color: white; border-color: #be123c; }
 .tf-answer {
     font-size: 11px;
     font-weight: 700;
@@ -1608,14 +1654,14 @@
 
 /* ===== DARK MODE — block overrides ===== */
 [data-theme="dark"] .block-section-title,
-[data-theme="dark"] .block-text,
+[data-theme="dark"] .block-text-intro,
 [data-theme="dark"] .block-callout,
 [data-theme="dark"] .block-citation,
 [data-theme="dark"] .block-biography,
 [data-theme="dark"] .block-source-text,
-[data-theme="dark"] .block-key-notion,
-[data-theme="dark"] .block-vocabulary,
-[data-theme="dark"] .block-method,
+[data-theme="dark"] .block-definition,
+[data-theme="dark"] .block-distinction,
+[data-theme="dark"] .block-questions,
 [data-theme="dark"] .block-exercise-qcm,
 [data-theme="dark"] .block-exercise-fill,
 [data-theme="dark"] .block-exercise-truefalse,
@@ -1629,8 +1675,7 @@
 [data-theme="dark"] .block-link,
 [data-theme="dark"] .block-table,
 [data-theme="dark"] .block-timeline,
-[data-theme="dark"] .block-diff,
-[data-theme="dark"] .block-glossary {
+[data-theme="dark"] .block-differentiation {
     background: #1e2330;
     border-color: #2d3748;
     color: var(--text);
@@ -1733,4 +1778,222 @@
 }
 [data-theme="dark"] .timeline-line {
     background: var(--border);
+}
+
+/* ===== DARK MODE — nested white elements ===== */
+[data-theme="dark"] .distinction-card {
+    background: #252d3d;
+    border-color: var(--border);
+}
+[data-theme="dark"] .distinction-card .explanation { color: var(--text-secondary); }
+[data-theme="dark"] .distinction-card .term { color: #a78bfa; }
+[data-theme="dark"] .block-distinction-header .label { color: #a78bfa; }
+
+[data-theme="dark"] .tf-item {
+    background: #252d3d;
+    border-color: var(--border);
+}
+[data-theme="dark"] .match-item {
+    background: #252d3d;
+    border-color: var(--border);
+}
+
+[data-theme="dark"] .block-ctrl-btn {
+    background: #252d3d;
+}
+[data-theme="dark"] .block-insert-btn {
+    background: #252d3d;
+    border-color: var(--border);
+    color: var(--text-muted);
+}
+[data-theme="dark"] .block-insert-btn:hover {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    border-style: solid;
+    color: #ffffff;
+}
+
+[data-theme="dark"] .diff-header {
+    background: #1a2236;
+    border-bottom-color: var(--border);
+    color: var(--text-secondary);
+}
+[data-theme="dark"] .diff-card { border-color: var(--border); }
+[data-theme="dark"] .diff-advanced { background: #1a253f; }
+[data-theme="dark"] .diff-supported { background: #1a2a26; }
+[data-theme="dark"] .diff-content { color: var(--text); }
+
+[data-theme="dark"] .timeline-dot { border-color: #1e2330; }
+
+[data-theme="dark"] .block-definition-header .label,
+[data-theme="dark"] .block-definition .term { color: #34d399; }
+[data-theme="dark"] .block-definition-header .icon { background: #059669; }
+[data-theme="dark"] .block-definition .def-content { color: var(--text-secondary); }
+
+[data-theme="dark"] .block-distinction-header .icon { background: #7c3aed; }
+
+[data-theme="dark"] .block-questions-header .icon { background: #be123c; }
+[data-theme="dark"] .block-questions li { color: var(--text); border-bottom-color: rgba(244,63,94,0.15); }
+[data-theme="dark"] .block-questions li::before { background: #252d3d; }
+
+[data-theme="dark"] .citation-mark { color: #1e3a5f; }
+[data-theme="dark"] .citation-author { color: #38bdf8; }
+
+[data-theme="dark"] .block-link { border-color: #1e3a5f; }
+[data-theme="dark"] .link-label { color: #38bdf8; }
+
+[data-theme="dark"] .bio-dates { color: #a78bfa; }
+
+[data-theme="dark"] .fill-cell {
+    background: #252d3d;
+    border-color: var(--border);
+    color: var(--text);
+}
+
+/* ===== MARKDOWN — TERME DE VOCABULAIRE ===== */
+.vocab-term {
+    background: #fef9c3;
+    color: #713f12;
+    border-radius: 3px;
+    padding: 1px 3px;
+    cursor: pointer;
+    border-bottom: 2px dotted #ca8a04;
+    position: relative;
+    display: inline;
+    font-style: normal;
+    font-weight: inherit;
+}
+
+/* Flèche du tooltip */
+.vocab-term::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #1f2937;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 201;
+}
+
+/* Bulle du tooltip */
+.vocab-term::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 14px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1f2937;
+    color: #f9fafb;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 7px 11px;
+    border-radius: 8px;
+    white-space: pre-wrap;
+    max-width: 240px;
+    width: max-content;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 200;
+    font-weight: normal;
+    font-style: normal;
+    text-align: left;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+}
+
+.vocab-term.vocab-open::before,
+.vocab-term.vocab-open::after { opacity: 1; }
+
+/* ===== MARKDOWN — SURLIGNÉ ==texte== ===== */
+mark.md-mark {
+    background: #fef08a;
+    color: #713f12;
+    border-radius: 2px;
+    padding: 0 2px;
+}
+
+/* ===== DARK MODE — markdown ===== */
+[data-theme="dark"] .vocab-term {
+    background: #422006;
+    color: #fed7aa;
+    border-bottom-color: #d97706;
+}
+[data-theme="dark"] .vocab-term::after {
+    background: #0f172a;
+    color: #e2e8f0;
+}
+[data-theme="dark"] .vocab-term::before {
+    border-top-color: #0f172a;
+}
+[data-theme="dark"] mark.md-mark {
+    background: #78350f;
+    color: #fef9c3;
+}
+
+/* ===== RESPONSIVE — blocks ===== */
+@media (max-width: 768px) {
+    .distinction-grid { grid-template-columns: 1fr; gap: 8px; }
+    .match-grid { grid-template-columns: 1fr; }
+
+    .block-section-title { padding: 12px 14px; gap: 10px; }
+    .block-section-number { font-size: 22px; }
+    .block-section-text { font-size: 15px; }
+
+    .pch-actions { width: 100%; }
+
+    .bio-avatar img { width: 54px; height: 54px; border-radius: 50%; object-fit: cover; }
+
+    .timeline-event { grid-template-columns: 60px 14px 1fr; }
+}
+
+@media (max-width: 480px) {
+    .block-text-intro,
+    .block-source-text .source-content,
+    .block-definition,
+    .block-distinction,
+    .block-questions,
+    .block-callout,
+    .block-citation,
+    .block-biography,
+    .block-exercise-qcm,
+    .block-exercise-fill,
+    .block-exercise-truefalse,
+    .block-exercise-match,
+    .block-exercise-sort,
+    .block-exercise-written,
+    .block-exercise-table,
+    .block-exercise-document,
+    .block-diagram,
+    .block-timeline {
+        padding: 14px 16px;
+    }
+
+    .block-biography { flex-direction: column; gap: 12px; }
+    .block-biography .bio-avatar { font-size: 32px; }
+    .block-biography .bio-avatar img { width: 48px; height: 48px; }
+
+    .sort-item { padding: 8px 10px; gap: 8px; }
+    .sort-text { font-size: 12px; }
+
+    .match-row { flex-wrap: wrap; }
+    .match-select { width: 100%; }
+
+    .tf-item { flex-wrap: wrap; gap: 8px; }
+    .tf-btns { margin-left: auto; }
+
+    .qcm-option { padding: 9px 10px; }
+
+    .diff-grid { grid-template-columns: 1fr; }
+    .diff-card { border-right: none; border-bottom: 1px solid var(--border-light); }
+    .diff-card:last-child { border-bottom: none; }
+
+    .table-scroll { font-size: 12px; }
+    .block-table th, .exo-table th { padding: 8px 10px; font-size: 11px; }
+    .block-table td, .exo-table td { padding: 7px 10px; }
+
+    .vocab-term::after { max-width: 180px; font-size: 11px; }
 }

@@ -1,6 +1,7 @@
 // Rendu des blocs dans la zone de contenu
 
 import { state } from './state.js';
+import { parseInline, parseMd } from './markdown.js';
 
 // ===== HELPER : URL → embed iframe URL =====
 function getEmbedUrl(raw) {
@@ -25,6 +26,18 @@ function getEmbedUrl(raw) {
         }
     } catch (e) {}
     return null;
+}
+
+// ===== HELPER : exercise-header label (éditable en mode prof) =====
+const PENCIL_SVG = `<svg class="exo-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="11" height="11"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+function exoLabel(block, defaultLabel, color) {
+    const canEdit = state.mode === 'prof';
+    const title = block.title || defaultLabel;
+    const safeDef = defaultLabel.replace(/'/g, "\\'");
+    if (canEdit) {
+        return `<div class="exercise-label editable" style="color:${color}" data-block-id="${block.id}" onclick="startEditExerciseTitle('${block.id}','${safeDef}')" title="Renommer l'exercice">${title}${PENCIL_SVG}</div>`;
+    }
+    return `<div class="exercise-label" style="color:${color}">${title}</div>`;
 }
 
 // Compute page ranges: [{num, title, subtitle, pbIndex, startIdx, endIdx}]
@@ -201,11 +214,11 @@ export function renderBlockContent(block) {
             </div>`;
 
         case 'text-intro':
-            return `<div class="block-text-intro">${block.content}</div>`;
+            return `<div class="block-text-intro">${parseMd(block.content)}</div>`;
 
         case 'source-text':
             return `<div class="block-source-text">
-                <div class="source-content">${block.content}</div>
+                <div class="source-content">${parseMd(block.content)}</div>
                 <div class="source-ref">
                     <span class="author">${block.author}</span>${block.title ? `, <span class="title">${block.title}</span>` : ''}${block.reference ? `, ${block.reference}` : ''}
                 </div>
@@ -226,7 +239,7 @@ export function renderBlockContent(block) {
                     <div class="icon">?</div>
                     <div class="label">Questions</div>
                 </div>
-                <ol>${block.questions.map(q => `<li>${q}</li>`).join('')}</ol>
+                <ol>${block.questions.map(q => `<li>${parseInline(q)}</li>`).join('')}</ol>
             </div>`;
 
         case 'definition':
@@ -236,7 +249,7 @@ export function renderBlockContent(block) {
                     <div class="label">Définition</div>
                 </div>
                 <div class="term">${block.term}</div>
-                <div class="def-content">${block.content}</div>
+                <div class="def-content">${parseMd(block.content)}</div>
             </div>`;
 
         case 'distinction':
@@ -248,11 +261,11 @@ export function renderBlockContent(block) {
                 <div class="distinction-grid">
                     <div class="distinction-card">
                         <div class="term">${block.termA}</div>
-                        <div class="explanation">${block.explanationA}</div>
+                        <div class="explanation">${parseMd(block.explanationA)}</div>
                     </div>
                     <div class="distinction-card">
                         <div class="term">${block.termB}</div>
-                        <div class="explanation">${block.explanationB}</div>
+                        <div class="explanation">${parseMd(block.explanationB)}</div>
                     </div>
                 </div>
             </div>`;
@@ -261,14 +274,14 @@ export function renderBlockContent(block) {
             return `<div class="block-exercise-qcm">
                 <div class="exercise-header">
                     <div class="icon" style="background:var(--accent)">☑️</div>
-                    <div class="label" style="color:#92400e">Exercice — QCM</div>
+                    ${exoLabel(block, 'Exercice — QCM', '#92400e')}
                 </div>
-                <div class="qcm-question">${block.question}</div>
+                <div class="qcm-question">${parseInline(block.question)}</div>
                 <div class="qcm-options">
                     ${block.options.map((opt, i) => `
                         <div class="qcm-option" id="qcm-${block.id}-${i}" onclick="selectQcm('${block.id}', ${i}, ${block.correctIndex})">
                             <span class="letter">${String.fromCharCode(65 + i)}</span>
-                            <span>${opt}</span>
+                            <span>${parseInline(opt)}</span>
                         </div>
                     `).join('')}
                 </div>
@@ -286,7 +299,7 @@ export function renderBlockContent(block) {
             const parts = block.text.split('___');
             let fillHtml = '';
             parts.forEach((part, i) => {
-                fillHtml += part;
+                fillHtml += parseInline(part);
                 if (i < block.blanks.length) {
                     const correct = block.blanks[i].correct.replace(/"/g, '&quot;');
                     const options = [block.blanks[i].correct, ...block.blanks[i].distractors].sort(() => Math.random() - 0.5);
@@ -296,7 +309,7 @@ export function renderBlockContent(block) {
             return `<div class="block-exercise-fill">
                 <div class="exercise-header">
                     <div class="icon" style="background:var(--info)">📝</div>
-                    <div class="label" style="color:#155e75">Exercice — Texte à trous</div>
+                    ${exoLabel(block, 'Exercice — Texte à trous', '#155e75')}
                 </div>
                 <div class="fill-text">${fillHtml}</div>
                 <button class="exo-check-btn" onclick="checkFill(this)">✔ Vérifier mes réponses</button>
@@ -307,9 +320,9 @@ export function renderBlockContent(block) {
             return `<div class="block-exercise-written">
                 <div class="exercise-header">
                     <div class="icon" style="background:var(--primary)">✍️</div>
-                    <div class="label" style="color:var(--primary-dark)">Exercice — Réponse rédigée</div>
+                    ${exoLabel(block, 'Exercice — Réponse rédigée', 'var(--primary-dark)')}
                 </div>
-                <div class="written-prompt">${block.prompt}</div>
+                <div class="written-prompt">${parseMd(block.prompt)}</div>
                 <textarea class="written-textarea" rows="${block.lines || 5}" placeholder="Rédigez votre réponse ici…"></textarea>
             </div>`;
 
@@ -349,7 +362,7 @@ export function renderBlockContent(block) {
         case 'citation':
             return `<div class="block-citation">
                 <div class="citation-mark">"</div>
-                <div class="citation-quote">${block.quote || ''}</div>
+                <div class="citation-quote">${parseMd(block.quote || '')}</div>
                 <div class="citation-attr">
                     ${block.author ? `<span class="citation-author">${block.author}</span>` : ''}
                     ${block.source ? `<span class="citation-source">${block.source}</span>` : ''}
@@ -425,7 +438,7 @@ export function renderBlockContent(block) {
                     ${events.map(ev => `<div class="timeline-event">
                         <div class="timeline-date">${ev.date}</div>
                         <div class="timeline-dot"></div>
-                        <div class="timeline-text">${ev.text}</div>
+                        <div class="timeline-text">${parseInline(ev.text)}</div>
                     </div>`).join('')}
                 </div>
             </div>`;
@@ -440,7 +453,7 @@ export function renderBlockContent(block) {
                     <span class="callout-icon" style="background:var(--chl);color:var(--cb)">🎯</span>
                     <span class="callout-label" style="color:var(--cb)">Objectifs</span>
                 </div>
-                <ul class="callout-list">${items.map(it => `<li>${it}</li>`).join('')}</ul>
+                <ul class="callout-list">${items.map(it => `<li>${parseInline(it)}</li>`).join('')}</ul>
             </div>`;
         }
 
@@ -451,7 +464,7 @@ export function renderBlockContent(block) {
                     <span class="callout-icon" style="background:var(--chl);color:var(--cb)">✅</span>
                     <span class="callout-label" style="color:var(--cb)">À retenir</span>
                 </div>
-                <ul class="callout-list callout-list--check">${items.map(it => `<li>${it}</li>`).join('')}</ul>
+                <ul class="callout-list callout-list--check">${items.map(it => `<li>${parseInline(it)}</li>`).join('')}</ul>
             </div>`;
         }
 
@@ -462,7 +475,7 @@ export function renderBlockContent(block) {
                     <span class="callout-icon" style="background:var(--chl);color:var(--cb)">💡</span>
                     <span class="callout-label" style="color:var(--cb)">Méthode${block.title ? ' — ' + block.title : ''}</span>
                 </div>
-                <ol class="callout-list">${steps.map(s => `<li>${s}</li>`).join('')}</ol>
+                <ol class="callout-list">${steps.map(s => `<li>${parseInline(s)}</li>`).join('')}</ol>
             </div>`;
         }
 
@@ -472,7 +485,7 @@ export function renderBlockContent(block) {
                     <span class="callout-icon" style="background:var(--chl);color:var(--cb)">⚠️</span>
                     <span class="callout-label" style="color:var(--cb)">Attention / Piège</span>
                 </div>
-                <div class="callout-body">${block.content || ''}</div>
+                <div class="callout-body">${parseMd(block.content || '')}</div>
             </div>`;
 
         case 'recall':
@@ -481,7 +494,7 @@ export function renderBlockContent(block) {
                     <span class="callout-icon" style="background:var(--chl);color:var(--cb)">🧠</span>
                     <span class="callout-label" style="color:var(--cb)">Rappel / Prérequis</span>
                 </div>
-                <div class="callout-body">${block.content || ''}</div>
+                <div class="callout-body">${parseMd(block.content || '')}</div>
             </div>`;
 
         case 'biography':
@@ -496,7 +509,7 @@ export function renderBlockContent(block) {
                     <div class="bio-name">${block.name || ''}</div>
                     ${block.dates ? `<div class="bio-dates">${block.dates}</div>` : ''}
                     ${block.role ? `<div class="bio-role">${block.role}</div>` : ''}
-                    ${block.content ? `<div class="bio-content">${block.content}</div>` : ''}
+                    ${block.content ? `<div class="bio-content">${parseMd(block.content)}</div>` : ''}
                 </div>
             </div>`;
 
@@ -506,7 +519,7 @@ export function renderBlockContent(block) {
                     <span class="callout-icon" style="background:var(--chl);color:var(--cb)">💬</span>
                     <span class="callout-label" style="color:var(--cb)">Exemple${block.title ? ' — ' + block.title : ''}</span>
                 </div>
-                <div class="callout-body">${block.content || ''}</div>
+                <div class="callout-body">${parseMd(block.content || '')}</div>
             </div>`;
 
         // ===== EXERCICES =====
@@ -517,11 +530,11 @@ export function renderBlockContent(block) {
             return `<div class="block-exercise-truefalse">
                 <div class="exercise-header">
                     <div class="icon" style="background:#dcfce7;color:#16a34a">✔️</div>
-                    <div class="label" style="color:#15803d">Exercice — Vrai / Faux</div>
+                    ${exoLabel(block, 'Exercice — Vrai / Faux', '#15803d')}
                 </div>
                 <div class="tf-list">
                     ${stmts.map((s, i) => `<div class="tf-item">
-                        <span class="tf-stmt">${s}</span>
+                        <span class="tf-stmt">${parseInline(s)}</span>
                         <div class="tf-btns">
                             <button class="tf-btn" onclick="this.classList.toggle('selected');this.nextElementSibling.classList.remove('selected')">V</button>
                             <button class="tf-btn" onclick="this.classList.toggle('selected');this.previousElementSibling.classList.remove('selected')">F</button>
@@ -532,6 +545,7 @@ export function renderBlockContent(block) {
                         </div>` : ''}
                     </div>`).join('')}
                 </div>
+                ${answers.some(a => a) ? `<button class="exo-check-btn" onclick="checkTrueFalse(this)">✔ Vérifier mes réponses</button>` : ''}
             </div>`;
         }
 
@@ -543,11 +557,11 @@ export function renderBlockContent(block) {
             return `<div class="block-exercise-match">
                 <div class="exercise-header">
                     <div class="icon" style="background:#f3e8ff;color:#9333ea">🔀</div>
-                    <div class="label" style="color:#7e22ce">Exercice — Association / Relier</div>
+                    ${exoLabel(block, 'Exercice — Association / Relier', '#7e22ce')}
                 </div>
                 <div class="match-rows">
                     ${lefts.map((l, i) => `<div class="match-row">
-                        <div class="match-item match-left">${l}</div>
+                        <div class="match-item match-left">${parseInline(l)}</div>
                         <span class="match-arrow">→</span>
                         <select class="match-select" data-correct="${esc(rights[i] || '')}">
                             <option value="">— choisir —</option>
@@ -573,7 +587,7 @@ export function renderBlockContent(block) {
             return `<div class="block-exercise-table">
                 <div class="exercise-header">
                     <div class="icon" style="background:#dbeafe;color:#1d4ed8">📊</div>
-                    <div class="label" style="color:#1e40af">Exercice — Tableau à compléter</div>
+                    ${exoLabel(block, 'Exercice — Tableau à compléter', '#1e40af')}
                 </div>
                 ${block.caption ? `<div class="exo-caption">${block.caption}</div>` : ''}
                 <div class="table-scroll">
@@ -595,13 +609,13 @@ export function renderBlockContent(block) {
             return `<div class="block-exercise-document">
                 <div class="exercise-header">
                     <div class="icon" style="background:#fed7aa;color:#c2410c">📂</div>
-                    <div class="label" style="color:#9a3412">Étude de document${block.docTitle ? ' — ' + block.docTitle : ''}</div>
+                    ${exoLabel(block, 'Étude de document' + (block.docTitle ? ' — ' + block.docTitle : ''), '#9a3412')}
                 </div>
-                ${block.content ? `<div class="doc-content">${block.content}</div>` : ''}
+                ${block.content ? `<div class="doc-content">${parseMd(block.content)}</div>` : ''}
                 ${block.source ? `<div class="doc-source">Source : ${block.source}</div>` : ''}
                 ${qs.length ? `<div class="doc-questions">
                     <div class="doc-questions-label">Questions</div>
-                    <ol>${qs.map(q => `<li>${q}</li>`).join('')}</ol>
+                    <ol>${qs.map(q => `<li>${parseInline(q)}</li>`).join('')}</ol>
                 </div>` : ''}
             </div>`;
         }
@@ -613,16 +627,16 @@ export function renderBlockContent(block) {
             return `<div class="block-exercise-sort" data-correct="${correctJson}">
                 <div class="exercise-header">
                     <div class="icon" style="background:#f3e8ff;color:#7c3aed">🔢</div>
-                    <div class="label" style="color:#6d28d9">Exercice — Classement</div>
+                    ${exoLabel(block, 'Exercice — Classement', '#6d28d9')}
                 </div>
                 ${block.instruction ? `<div class="sort-instruction">${block.instruction}</div>` : ''}
                 <div class="sort-list">
-                    ${display.map(item => `<div class="sort-item" data-value="${item.replace(/"/g, '&quot;')}"><span class="sort-handle">⠿</span><span class="sort-text">${item}</span></div>`).join('')}
+                    ${display.map(item => `<div class="sort-item" data-value="${item.replace(/"/g, '&quot;')}"><span class="sort-handle">⠿</span><span class="sort-text">${parseInline(item)}</span></div>`).join('')}
                 </div>
                 <button class="exo-check-btn" onclick="checkSort(this)">✔ Vérifier l'ordre</button>
                 <div class="exo-correction">
                     <div class="exo-correction-content">
-                        <div class="sort-corr"><strong>Ordre correct :</strong> ${items.join(' → ')}</div>
+                        <div class="sort-corr"><strong>Ordre correct :</strong> ${items.map(it => parseInline(it)).join(' → ')}</div>
                     </div>
                     <div class="exo-correction-overlay">
                         <button class="exo-reveal-btn" onclick="revealCorrection(this)">👁 Voir la correction</button>
@@ -641,7 +655,7 @@ export function renderBlockContent(block) {
                     ${block.duration ? `<span class="callout-badge" style="color:var(--cb);background:var(--chl)" onclick="openTimer(this)" title="Démarrer le minuteur">⏱ ${block.duration}</span>` : ''}
                 </div>
                 ${block.groups ? `<div class="callout-meta">👤 ${block.groups}</div>` : ''}
-                ${block.instructions ? `<div class="callout-body">${block.instructions}</div>` : ''}
+                ${block.instructions ? `<div class="callout-body">${parseMd(block.instructions)}</div>` : ''}
             </div>`;
 
         case 'activity-oral':
@@ -651,7 +665,7 @@ export function renderBlockContent(block) {
                     <span class="callout-label" style="color:var(--cb)">Activité orale${block.activityType ? ' — ' + block.activityType : ''}${block.title ? ' : ' + block.title : ''}</span>
                     ${block.duration ? `<span class="callout-badge" style="color:var(--cb);background:var(--chl)" onclick="openTimer(this)" title="Démarrer le minuteur">⏱ ${block.duration}</span>` : ''}
                 </div>
-                ${block.instructions ? `<div class="callout-body">${block.instructions}</div>` : ''}
+                ${block.instructions ? `<div class="callout-body">${parseMd(block.instructions)}</div>` : ''}
             </div>`;
 
         case 'activity-instruction':
@@ -660,7 +674,7 @@ export function renderBlockContent(block) {
                     <span class="callout-icon" style="background:var(--chl);color:var(--cb)">📋</span>
                     <span class="callout-label" style="color:var(--cb)">Consigne${block.title ? ' — ' + block.title : ''}</span>
                 </div>
-                ${block.instructions ? `<div class="callout-body">${block.instructions}</div>` : ''}
+                ${block.instructions ? `<div class="callout-body">${parseMd(block.instructions)}</div>` : ''}
             </div>`;
 
         case 'differentiation':
@@ -669,9 +683,9 @@ export function renderBlockContent(block) {
                     <span>⭐</span> Différenciation pédagogique
                 </div>
                 <div class="diff-grid">
-                    ${block.standard ? `<div class="diff-card diff-standard"><div class="diff-label">Standard</div><div class="diff-content">${block.standard}</div></div>` : ''}
-                    ${block.advanced ? `<div class="diff-card diff-advanced"><div class="diff-label">Approfondissement</div><div class="diff-content">${block.advanced}</div></div>` : ''}
-                    ${block.supported ? `<div class="diff-card diff-supported"><div class="diff-label">Aide</div><div class="diff-content">${block.supported}</div></div>` : ''}
+                    ${block.standard  ? `<div class="diff-card diff-standard"><div class="diff-label">Standard</div><div class="diff-content">${parseMd(block.standard)}</div></div>` : ''}
+                    ${block.advanced  ? `<div class="diff-card diff-advanced"><div class="diff-label">Approfondissement</div><div class="diff-content">${parseMd(block.advanced)}</div></div>` : ''}
+                    ${block.supported ? `<div class="diff-card diff-supported"><div class="diff-label">Aide</div><div class="diff-content">${parseMd(block.supported)}</div></div>` : ''}
                 </div>
             </div>`;
 

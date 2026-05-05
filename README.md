@@ -78,3 +78,17 @@ php -S localhost:8000
 - **Vidéos embed** — YouTube (`youtu.be`, `youtube.com/watch`) et Vimeo convertis automatiquement en iframes 16:9
 - **Biographie** — photo ronde via URL ou emoji de remplacement
 - **Sauvegarde auto** — toute modification déclenche une sauvegarde debounced vers le serveur PHP
+
+## Mise en forme inline (markdown custom)
+
+Tous les champs de texte libre (textarea dans la modale d'édition) supportent une syntaxe markdown simplifiée, avec une barre d'outils intégrée.
+
+| Syntaxe | Résultat |
+|---|---|
+| `**mot**` | **gras** |
+| `*mot*` | *italique* |
+| `==mot==` | surligné en jaune |
+| `[texte](https://...)` | hyperlien |
+| `{terme\|définition}` | terme surligné (jaune/brun) avec tooltip au clic |
+
+La barre d'outils wrap automatiquement le texte sélectionné ou insère un placeholder si rien n'est sélectionné. Le bouton 📖 (vocabulaire) ouvre une invite pour saisir la définition.

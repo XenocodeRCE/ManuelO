@@ -6,6 +6,8 @@ import { renderBlocks, renderSidebar, getPages } from './render.js';
 import { moveBlock, toggleVisibility, deleteBlock, selectQcm } from './actions.js';
 import { openModal, closeModal, submitBlock } from './modal.js';
 import { save, saveNow } from './save.js';
+import { toggleVocabTooltip } from './markdown.js';
+import { enterPresentation, exitPresentation, presGo } from './presentation.js';
 
 // ===== CATALOGUE DES BLOCS (pour la modale d'insertion) =====
 const BLOCKS_CATALOG = [
@@ -405,6 +407,33 @@ window.insertModalAddPage = insertModalAddPage;
 window.filterInsertBlocks = filterInsertBlocks;
 window.startEditPageTitle = startEditPageTitle;
 
+// ===== INLINE RENAME — EXERCICE =====
+function startEditExerciseTitle(blockId, defaultLabel) {
+    if (state.mode !== 'prof') return;
+    const label = document.querySelector(`.exercise-label[data-block-id="${blockId}"]`);
+    if (!label) return;
+    const block = state.blocks.find(b => b.id === blockId);
+    if (!block) return;
+    const current = block.title || '';
+    const color = label.style.color;
+    label.innerHTML = `<input class="exo-title-input" value="${current.replace(/"/g, '&quot;')}" placeholder="${defaultLabel.replace(/"/g, '&quot;')}" />`;
+    label.classList.add('editing');
+    const input = label.querySelector('input');
+    input.focus(); input.select();
+    const saveVal = () => {
+        block.title = input.value.trim();
+        refresh();
+        save();
+    };
+    input.addEventListener('blur', saveVal);
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { block.title = current; refresh(); }
+    });
+    input.addEventListener('click', e => e.stopPropagation());
+}
+window.startEditExerciseTitle = startEditExerciseTitle;
+
 // ===== TOGGLE SIDEBARS =====
 function toggleSidebarLeft() {
     const el = document.querySelector('.sidebar-left');
@@ -413,7 +442,15 @@ function toggleSidebarLeft() {
     btn.classList.toggle('active', el.classList.contains('collapsed'));
 }
 
-window.toggleSidebarLeft  = toggleSidebarLeft;
+function toggleSommaireOnMobile() {
+    const sidebar = document.querySelector('.sidebar-left');
+    const btn = document.getElementById('btn-sommaire-mobile');
+    sidebar.classList.toggle('mobile-open');
+    btn.classList.toggle('active', sidebar.classList.contains('mobile-open'));
+}
+
+window.toggleSidebarLeft = toggleSidebarLeft;
+window.toggleSommaireOnMobile = toggleSommaireOnMobile;
 
 // ===== DARK MODE =====
 function toggleDarkMode() {
@@ -460,6 +497,64 @@ function showConfirmReveal(onConfirm) {
     overlay.addEventListener('click', onOutside);
 }
 
+// ===== TOAST (remplace alert() pour ne pas quitter le plein écran) =====
+function showToast(msg, type = 'info') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = msg;
+    container.appendChild(toast);
+    // Force reflow for animation
+    void toast.offsetWidth;
+    toast.classList.add('toast-show');
+    setTimeout(() => {
+        toast.classList.remove('toast-show');
+        toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+    }, 3000);
+}
+
+// ===== EXERCICE — VÉRIFIER VRAI / FAUX =====
+function checkTrueFalse(btn) {
+    const container = btn.closest('.block-exercise-truefalse');
+    const items = container.querySelectorAll('.tf-item');
+    let correct = 0, total = 0, unanswered = 0;
+    items.forEach(item => {
+        const correctSpan = item.querySelector('.tf-answer');
+        if (!correctSpan) return; // pas de correction définie pour cet item
+        total++;
+        const correctAnswer = correctSpan.classList.contains('tf-v') ? 'V' : 'F';
+        const vBtn = item.querySelector('.tf-btn:first-child');
+        const fBtn = item.querySelector('.tf-btn:last-child');
+        const selectedV = vBtn.classList.contains('selected');
+        const selectedF = fBtn.classList.contains('selected');
+        // Reset previous feedback
+        vBtn.classList.remove('tf-correct', 'tf-wrong');
+        fBtn.classList.remove('tf-correct', 'tf-wrong');
+        if (!selectedV && !selectedF) { unanswered++; return; }
+        const chosen = selectedV ? 'V' : 'F';
+        if (chosen === correctAnswer) {
+            correct++;
+            (selectedV ? vBtn : fBtn).classList.add('tf-correct');
+        } else {
+            (selectedV ? vBtn : fBtn).classList.add('tf-wrong');
+        }
+    });
+    if (unanswered > 0) {
+        showToast(`Répondez à toutes les affirmations (${unanswered} sans réponse).`, 'warn');
+        return;
+    }
+    if (correct === total) {
+        showToast('✅ Bravo ! Toutes les réponses sont correctes.', 'success');
+    } else {
+        showToast(`${correct} / ${total} correctes. Les erreurs sont en rouge.`, 'error');
+    }
+}
+
 // ===== EXERCICE — VÉRIFIER TEXTE À TROUS =====
 function checkFill(btn) {
     const container = btn.closest('.block-exercise-fill');
@@ -473,13 +568,13 @@ function checkFill(btn) {
         else sel.classList.add('fill-wrong');
     });
     if (unanswered > 0) {
-        alert(`Complétez tous les trous avant de vérifier (${unanswered} non rempli${unanswered > 1 ? 's' : ''}).`);
+        showToast(`Complétez tous les trous avant de vérifier (${unanswered} non rempli${unanswered > 1 ? 's' : ''}).`, 'warn');
         return;
     }
     if (correct === total) {
-        alert('✅ Bravo ! Toutes les réponses sont correctes.');
+        showToast('✅ Bravo ! Toutes les réponses sont correctes.', 'success');
     } else {
-        alert(`${correct} / ${total} correctes. Les réponses incorrectes sont surlignées en rouge.`);
+        showToast(`${correct} / ${total} correctes. Les réponses incorrectes sont surlignées en rouge.`, 'error');
     }
 }
 
@@ -489,9 +584,9 @@ function checkSort(btn) {
     const current = Array.from(container.querySelectorAll('.sort-list .sort-item'))
         .map(el => el.dataset.value);
     if (correct.every((v, i) => v === current[i])) {
-        alert('✅ Bravo ! L\'ordre est correct.');
+        showToast('✅ Bravo ! L\'ordre est correct.', 'success');
     } else {
-        alert('❌ Ce n\'est pas le bon ordre. Réessayez ou regardez la correction.');
+        showToast('❌ Ce n\'est pas le bon ordre. Réessayez ou regardez la correction.', 'error');
     }
 }
 
@@ -506,13 +601,13 @@ function checkMatch(btn) {
         else sel.classList.add('fill-wrong');
     });
     if (unanswered > 0) {
-        alert(`Complétez toutes les associations avant de vérifier (${unanswered} non remplie${unanswered > 1 ? 's' : ''}).`);
+        showToast(`Complétez toutes les associations avant de vérifier (${unanswered} non remplie${unanswered > 1 ? 's' : ''}).`, 'warn');
         return;
     }
     if (correct === total) {
-        alert('✅ Bravo ! Toutes les associations sont correctes.');
+        showToast('✅ Bravo ! Toutes les associations sont correctes.', 'success');
     } else {
-        alert(`${correct} / ${total} correctes. Les erreurs sont surlignées en rouge.`);
+        showToast(`${correct} / ${total} correctes. Les erreurs sont surlignées en rouge.`, 'error');
     }
 }
 
@@ -528,6 +623,7 @@ function toggleDiagramView(btn) {
 }
 
 window.revealCorrection   = revealCorrection;
+window.checkTrueFalse     = checkTrueFalse;
 window.checkFill          = checkFill;
 window.checkSort          = checkSort;
 window.checkMatch         = checkMatch;
@@ -643,9 +739,63 @@ window.closeTimerOnOverlay = closeTimerOnOverlay;
 window.toggleTimer       = toggleTimer;
 window.resetTimer        = resetTimer;
 
+// ===== MARKDOWN INLINE — helpers globaux =====
+window.toggleVocabTooltip = toggleVocabTooltip;
+
+// ===== MODE PRÉSENTATION — globals =====
+window.enterPresentation = enterPresentation;
+window.exitPresentation  = exitPresentation;
+window.presGo            = presGo;
+window.presToggleFullscreen = function() {
+    if (document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => {});
+    } else {
+        document.documentElement.requestFullscreen?.().catch(() => {});
+    }
+};
+
+// Outil de mise en forme dans la barre d'outils des textareas
+window.mdWrap = function(action, id) {
+    const ta = document.getElementById(id);
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end   = ta.selectionEnd;
+    const selected = ta.value.slice(start, end);
+    let before, after, placeholder;
+    switch (action) {
+        case 'bold':   before = '**'; after = '**'; placeholder = 'texte en gras'; break;
+        case 'italic': before = '*';  after = '*';  placeholder = 'texte en italique'; break;
+        case 'mark':   before = '=='; after = '=='; placeholder = 'texte surligné'; break;
+        case 'link':   before = '[';  after = '](https://...)'; placeholder = 'texte du lien'; break;
+        case 'vocab': {
+            // eslint-disable-next-line no-alert
+            const tooltip = prompt('Définition / explication du terme :');
+            if (tooltip === null) return;
+            before = '{'; after = `|${tooltip}}`; placeholder = 'terme'; break;
+        }
+        default: return;
+    }
+    const text = selected || placeholder;
+    ta.value = ta.value.slice(0, start) + before + text + after + ta.value.slice(end);
+    ta.focus();
+    ta.setSelectionRange(start + before.length, start + before.length + text.length);
+};
+
 // ===== ÉVÉNEMENTS =====
-document.addEventListener('click', () => {
-    // insert modal closes via its own overlay click handler
+document.addEventListener('click', (e) => {
+    // Ferme les tooltips vocab ouverts au clic en dehors
+    document.querySelectorAll('.vocab-term.vocab-open').forEach(t => t.classList.remove('vocab-open'));
+
+    // Ferme le sommaire mobile si on clique en dehors
+    const sidebar = document.querySelector('.sidebar-left');
+    const mobileBtn = document.getElementById('btn-sommaire-mobile');
+    if (sidebar?.classList.contains('mobile-open')
+        && !sidebar.contains(e.target)
+        && e.target !== mobileBtn
+        && !mobileBtn?.contains(e.target)) {
+        sidebar.classList.remove('mobile-open');
+        mobileBtn?.classList.remove('active');
+    }
 });
 
 document.getElementById('modal-overlay').addEventListener('click', function (e) {
