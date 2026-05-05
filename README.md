@@ -9,6 +9,15 @@
 - SortableJS (CDN) — drag & drop des blocs et exercices de classement
 - Mermaid.js v11 (CDN) — rendu de diagrammes
 
+---
+
+## Images
+![](https://i.imgur.com/VqoRm3u.png)
+![](https://i.imgur.com/lZBKkDI.png)
+![](https://i.imgur.com/MkaBnit.png)
+
+---
+
 ## Structure
 
 ```
