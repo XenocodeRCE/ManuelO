@@ -2,7 +2,7 @@
 
 Éditeur de manuels de cours pédagogiques — gratuit, sans dépendance, sans build tool.
 
-Version live de test : [https://philo-lycee.fr/ManuelO/](https://philo-lycee.fr/ManuelO/)
+Version live de test : [https://philo-lycee.fr/ManuelO/](https://philo-lycee.fr/ManuelO/) (ne rient mettr d'important, c'est juste pour voir)
 
 ## Stack
 
