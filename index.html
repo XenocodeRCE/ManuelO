@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ManuelO — Mes manuels</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/index.css">
+</head>
+<body class="index-page">
+
+<header class="header">
+    <div class="header-left">
+        <div class="logo">
+            <div class="logo-icon">φ</div>
+            <div class="logo-text">ManuelO</div>
+        </div>
+    </div>
+    <div class="header-right">
+        <label class="btn btn-ghost import-btn" title="Importer un fichier JSON">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Importer JSON
+            <input type="file" id="import-input" accept=".json" hidden>
+        </label>
+        <button class="btn btn-primary" id="btn-new">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nouveau manuel
+        </button>
+    </div>
+</header>
+
+<main class="index-main">
+    <div class="index-hero">
+        <h1>Mes manuels de cours</h1>
+        <p>Créez, organisez et partagez vos manuels pédagogiques.</p>
+    </div>
+
+    <!-- Formulaire Nouveau manuel -->
+    <div class="new-manual-form" id="new-manual-form" hidden>
+        <h2>Nouveau manuel</h2>
+        <div class="form-grid">
+            <div class="form-group" style="grid-column:1/-1">
+                <label>Titre du manuel *</label>
+                <input id="nm-title" placeholder="Ex: Terminale — La Technique" required>
+            </div>
+            <div class="form-group">
+                <label>Matière</label>
+                <input id="nm-subject" placeholder="Ex: Philosophie" value="Philosophie">
+            </div>
+            <div class="form-group">
+                <label>Classe</label>
+                <input id="nm-level" placeholder="Ex: Terminale" value="Terminale">
+            </div>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-ghost" id="btn-cancel-new">Annuler</button>
+            <button class="btn btn-primary" id="btn-create">Créer le manuel</button>
+        </div>
+    </div>
+
+    <!-- Liste des manuels -->
+    <div class="manuals-grid" id="manuals-grid">
+        <div class="manuals-loading">Chargement…</div>
+    </div>
+</main>
+
+<script>
+(function () {
+    const grid = document.getElementById('manuals-grid');
+    const form = document.getElementById('new-manual-form');
+
+    // ===== UUID =====
+    function uuid() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+    }
+
+    // ===== FORMAT DATE =====
+    function fmtDate(ts) {
+        if (!ts) return '';
+        const d = new Date(ts * 1000);
+        return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    // ===== CHARGER LA LISTE =====
+    async function loadList() {
+        try {
+            const res = await fetch('api/list.php');
+            const list = await res.json();
+
+            if (!list.length) {
+                grid.innerHTML = '<div class="manuals-empty"><p>Aucun manuel pour l\'instant.</p><p>Cliquez sur <strong>Nouveau manuel</strong> pour commencer.</p></div>';
+                return;
+            }
+
+            grid.innerHTML = list.map(m => `
+                <div class="manual-card" data-id="${m.id}">
+                    <div class="manual-card-body">
+                        <div class="manual-card-badge">${m.subject || 'Manuel'}</div>
+                        <h3 class="manual-card-title">${m.title || 'Sans titre'}</h3>
+                        ${m.level ? `<p class="manual-card-chapter">${m.level}</p>` : ''}
+                    </div>
+                    <div class="manual-card-footer">
+                        <span class="manual-card-date">${fmtDate(m.updatedAt)}</span>
+                        <div class="manual-card-actions">
+                            <button class="btn btn-primary btn-sm" onclick="window.location.href='editor.html?id=${m.id}'">Ouvrir</button>
+                            <button class="btn btn-ghost btn-sm btn-danger" onclick="deleteManual('${m.id}',this)">Supprimer</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } catch (err) {
+            grid.innerHTML = '<div class="manuals-error">Impossible de charger la liste des manuels. Vérifiez que le serveur PHP est actif.</div>';
+        }
+    }
+
+    // ===== CRÉER UN MANUEL =====
+    document.getElementById('btn-new').addEventListener('click', () => {
+        form.hidden = false;
+        document.getElementById('nm-title').focus();
+        form.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    document.getElementById('btn-cancel-new').addEventListener('click', () => {
+        form.hidden = true;
+    });
+
+    document.getElementById('btn-create').addEventListener('click', async () => {
+        const title = document.getElementById('nm-title').value.trim();
+        if (!title) { document.getElementById('nm-title').focus(); return; }
+
+        const id = uuid();
+        const meta = {
+            id,
+            title,
+            subject: document.getElementById('nm-subject').value.trim(),
+            level:   document.getElementById('nm-level').value.trim(),
+            createdAt: Math.floor(Date.now() / 1000),
+            updatedAt: Math.floor(Date.now() / 1000),
+        };
+
+        const res = await fetch('api/save.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, data: { meta, blocks: [] } })
+        });
+        const json = await res.json();
+        if (json.ok) {
+            window.location.href = 'editor.html?id=' + id;
+        } else {
+            alert('Erreur : ' + (json.error || 'Sauvegarde échouée'));
+        }
+    });
+
+    // ===== SUPPRIMER UN MANUEL =====
+    window.deleteManual = async function (id, btn) {
+        if (!confirm('Supprimer ce manuel ? Cette action est irréversible.')) return;
+        try {
+            const res = await fetch('api/delete.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            const json = await res.json();
+            if (json.ok) {
+                btn.closest('.manual-card').remove();
+                if (!grid.querySelector('.manual-card')) {
+                    grid.innerHTML = '<div class="manuals-empty"><p>Aucun manuel.</p></div>';
+                }
+            }
+        } catch (err) {
+            alert('Erreur lors de la suppression.');
+        }
+    };
+
+    // ===== IMPORTER JSON =====
+    document.getElementById('import-input').addEventListener('change', async function () {
+        const file = this.files[0];
+        if (!file) return;
+        const text = await file.text();
+        let data;
+        try { data = JSON.parse(text); } catch { alert('Fichier JSON invalide.'); return; }
+
+        const id = (data.meta && data.meta.id) ? data.meta.id : uuid();
+        if (data.meta) data.meta.id = id;
+
+        const res = await fetch('api/save.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, data })
+        });
+        const json = await res.json();
+        if (json.ok) window.location.href = 'editor.html?id=' + id;
+        else alert('Erreur lors de l\'importation.');
+        this.value = '';
+    });
+
+    loadList();
+})();
+</script>
+</body>
+</html>

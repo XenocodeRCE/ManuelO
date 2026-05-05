@@ -1,0 +1,351 @@
+/* Styles de la page d'index (landing page) et indicateur de sauvegarde */
+
+/* ===== INDICATEUR DE SAUVEGARDE ===== */
+.save-indicator {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 12px;
+    border-radius: 20px;
+    margin-left: 8px;
+    transition: opacity 0.3s, transform 0.3s;
+    opacity: 0;
+    transform: translateY(2px);
+}
+.save-indicator:not(:empty) { opacity: 1; transform: translateY(0); }
+.save-indicator.saving { background: var(--surface-alt); color: var(--text-secondary); border: 1px solid var(--border); }
+.save-indicator.saved  { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+.save-indicator.error  { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+
+/* ===== DRAG & DROP (Sortable) ===== */
+.sortable-ghost  { opacity: 0.3; background: var(--primary-bg); border-radius: var(--radius); }
+.sortable-chosen { box-shadow: 0 12px 36px rgba(0,0,0,0.12); }
+.block-wrapper.edit-mode { cursor: grab; }
+.block-wrapper.edit-mode:active { cursor: grabbing; }
+
+/* ===== PAGE D'INDEX ===== */
+body.index-page {
+    background: #f3f4f6;
+    min-height: 100vh;
+    overflow: auto;
+}
+
+/* Header sur la landing page */
+body.index-page .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.index-main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+}
+
+/* Hero */
+@keyframes heroIn {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.index-hero {
+    margin-bottom: 36px;
+    animation: heroIn 0.5s cubic-bezier(0.4,0,0.2,1) both;
+}
+.index-hero h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 2.2rem;
+    color: var(--text);
+    margin: 0 0 10px;
+    line-height: 1.2;
+}
+.index-hero p {
+    color: var(--text-secondary);
+    font-size: 15px;
+    margin: 0;
+}
+
+/* Formulaire nouveau manuel */
+@keyframes formIn {
+    from { opacity: 0; transform: translateY(-8px) scale(0.99); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.new-manual-form {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow-md);
+    animation: formIn 0.25s cubic-bezier(0.4,0,0.2,1) both;
+}
+.new-manual-form h2 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0 0 20px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.new-manual-form h2::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 18px;
+    background: var(--text);
+    border-radius: 2px;
+}
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+/* Inputs dans le formulaire */
+.new-manual-form .form-group input {
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.new-manual-form .form-group input:focus {
+    border-color: var(--text);
+    box-shadow: 0 0 0 4px rgba(17,24,39,0.08);
+}
+
+/* Grille des manuels */
+@keyframes cardIn {
+    from { opacity: 0; transform: translateY(20px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.manuals-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(288px, 1fr));
+    gap: 22px;
+}
+
+.manual-card {
+    background: white;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow 0.25s cubic-bezier(0.4,0,0.2,1),
+                transform 0.25s cubic-bezier(0.4,0,0.2,1),
+                border-color 0.25s;
+    overflow: hidden;
+    animation: cardIn 0.4s cubic-bezier(0.4,0,0.2,1) backwards;
+}
+
+/* Stagger pour chaque carte */
+.manual-card:nth-child(1) { animation-delay: 0.05s; }
+.manual-card:nth-child(2) { animation-delay: 0.10s; }
+.manual-card:nth-child(3) { animation-delay: 0.15s; }
+.manual-card:nth-child(4) { animation-delay: 0.20s; }
+.manual-card:nth-child(5) { animation-delay: 0.25s; }
+.manual-card:nth-child(6) { animation-delay: 0.30s; }
+.manual-card:nth-child(n+7) { animation-delay: 0.35s; }
+
+.manual-card:hover {
+    box-shadow: 0 12px 40px rgba(0,0,0,0.10), 0 4px 12px rgba(0,0,0,0.06);
+    transform: translateY(-4px);
+    border-color: var(--border);
+}
+
+/* Accent bar au top de chaque carte */
+.manual-card::before {
+    content: '';
+    display: block;
+    height: 3px;
+    background: var(--text);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+}
+.manual-card:hover::before { transform: scaleX(1); }
+
+.manual-card-body {
+    padding: 20px 20px 12px;
+    flex: 1;
+}
+.manual-card-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    background: var(--surface-alt);
+    color: var(--text-secondary);
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-bottom: 10px;
+    transition: background 0.2s, color 0.2s;
+}
+.manual-card:hover .manual-card-badge {
+    background: var(--text);
+    color: white;
+}
+.manual-card-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 6px;
+    line-height: 1.3;
+}
+.manual-card-chapter {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 0 0 4px;
+}
+.manual-card-author {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+    margin: 0;
+}
+.manual-card-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: var(--surface-alt);
+    transition: background 0.2s;
+}
+.manual-card:hover .manual-card-footer { background: var(--surface-alt); }
+.manual-card-date {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+.manual-card-actions {
+    display: flex;
+    gap: 6px;
+}
+
+/* Bouton taille sm */
+.btn-sm {
+    padding: 4px 12px;
+    font-size: 12px;
+    border-radius: 6px;
+}
+.btn-danger {
+    color: var(--danger);
+}
+.btn-danger:hover {
+    background: #fee2e2 !important;
+    color: var(--danger) !important;
+    border-color: #fca5a5 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(239,68,68,0.2) !important;
+}
+
+/* États vide / erreur / chargement */
+.manuals-empty, .manuals-loading, .manuals-error {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--text-muted);
+    font-size: 15px;
+    animation: heroIn 0.4s ease both;
+}
+.manuals-loading::before {
+    content: '⏳';
+    display: block;
+    font-size: 32px;
+    margin-bottom: 12px;
+}
+.manuals-empty::before {
+    content: '📚';
+    display: block;
+    font-size: 40px;
+    margin-bottom: 16px;
+}
+.manuals-error { color: var(--danger); }
+
+/* Bouton import */
+.import-btn {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Header boutons */
+.header-right .btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+
+/* ===== PAGE D'INDEX ===== */
+body.index-page {
+    background: var(--bg, #f8f7ff);
+    min-height: 100vh;
+}
+
+.index-main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+}
+
+.index-hero {
+    margin-bottom: 32px;
+}
+.index-hero h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 2rem;
+    color: var(--text);
+    margin: 0 0 8px;
+}
+.index-hero p {
+    color: var(--text-muted, #6b7280);
+    font-size: 15px;
+    margin: 0;
+}
+
+/* Formulaire nouveau manuel */
+.new-manual-form {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow);
+}
+.new-manual-form h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0 0 20px;
+    color: var(--text);
+}
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+
+
+/* Header boutons */
+.header-right .btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
