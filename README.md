@@ -2,6 +2,8 @@
 
 Éditeur de manuels de cours pédagogiques — gratuit, sans dépendance, sans build tool.
 
+Version live de test : [https://philo-lycee.fr/ManuelO/](https://philo-lycee.fr/ManuelO/)
+
 ## Stack
 
 - HTML5 / CSS3 / JavaScript ES modules (vanilla)
