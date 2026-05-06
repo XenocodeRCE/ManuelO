@@ -5,6 +5,60 @@ import { renderBlocks } from './render.js';
 import { save } from './save.js';
 import { createArgumentMap } from './argument-map.js';
 
+const AUDIO_MAX_SIZE_BYTES = 50 * 1024 * 1024;
+
+function notifyError(message) {
+    if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+        window.showToast(message, 'error');
+        return;
+    }
+    // eslint-disable-next-line no-alert
+    alert(message);
+}
+
+async function uploadAudioFile(file) {
+    if (!(file instanceof File)) {
+        throw new Error('Fichier audio invalide.');
+    }
+    if (file.size > AUDIO_MAX_SIZE_BYTES) {
+        throw new Error('Le fichier audio depasse 50 Mo.');
+    }
+
+    const formData = new FormData();
+    formData.append('audio', file);
+
+    const res = await fetch('api/upload_audio.php', {
+        method: 'POST',
+        body: formData
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.ok || !json?.url) {
+        throw new Error(json?.error || 'Upload audio impossible.');
+    }
+
+    return String(json.url);
+}
+
+function setupAudioModalInteractions() {
+    const modeEl = document.getElementById('field-sourceMode');
+    if (!modeEl) return;
+
+    const urlGroup = document.querySelector('.form-group[data-field-key="url"]');
+    const fileGroup = document.querySelector('.form-group[data-field-key="audioFile"]');
+    if (!urlGroup || !fileGroup) return;
+
+    const apply = () => {
+        const mode = String(modeEl.value || 'link');
+        const isUpload = mode === 'upload';
+
+        urlGroup.style.display = isUpload ? 'none' : '';
+        fileGroup.style.display = isUpload ? '' : 'none';
+    };
+
+    modeEl.addEventListener('change', apply);
+    apply();
+}
+
 export const modalForms = {
     'source-text': { title: 'Texte source', fields: [
         { key: 'author', label: 'Auteur', type: 'input', placeholder: 'Ex: Platon' },
@@ -70,6 +124,21 @@ export const modalForms = {
         { key: 'url', label: 'URL', type: 'input', placeholder: 'https://www.youtube.com/...' },
         { key: 'mediaType', label: 'Type', type: 'input', placeholder: 'vidéo / audio / podcast' },
         { key: 'description', label: 'Description', type: 'input', placeholder: 'Durée, source, contexte…' }
+    ]},
+    'audio': { title: 'Audio', fields: [
+        { key: 'title', label: 'Titre', type: 'input', placeholder: 'Lecture du texte de Platon' },
+        {
+            key: 'sourceMode',
+            label: 'Source audio',
+            type: 'select',
+            options: [
+                { value: 'link', label: 'Lien (URL)' },
+                { value: 'upload', label: 'Upload de fichier (max 50 Mo)' }
+            ]
+        },
+        { key: 'url', label: 'URL audio', type: 'input', placeholder: 'https://.../cours.mp3' },
+        { key: 'audioFile', label: 'Fichier audio', type: 'file', accept: 'audio/*', hint: 'Formats acceptes: mp3, wav, ogg, m4a, webm, aac, flac (max 50 Mo).' },
+        { key: 'description', label: 'Description', type: 'input', placeholder: 'Contexte, duree, objectifs...' }
     ]},
     'diagram': { title: 'Schéma / Diagramme', fields: [
         { key: 'title', label: 'Titre', type: 'input', placeholder: 'Les conditions de la connaissance' },
@@ -173,10 +242,27 @@ export function openModal(type, existingValues = null) {
     let html = '';
     config.fields.forEach(f => {
         const val = existingValues ? (existingValues[f.key] ?? '') : '';
-        html += `<div class="form-group">`;
+        html += `<div class="form-group" data-field-key="${f.key}">`;
         html += `<label>${f.label}</label>`;
         if (f.type === 'input') {
             html += `<input id="field-${f.key}" placeholder="${f.placeholder || ''}" value="${String(val).replace(/"/g, '&quot;')}">`;
+        } else if (f.type === 'select') {
+            const options = Array.isArray(f.options) ? f.options : [];
+            const selectedValue = String(val || options[0]?.value || '');
+            html += `<select id="field-${f.key}">`;
+            html += options.map(opt => {
+                const optValue = String(opt?.value || '');
+                const optLabel = String(opt?.label || optValue);
+                const selected = optValue === selectedValue ? ' selected' : '';
+                return `<option value="${optValue}"${selected}>${optLabel}</option>`;
+            }).join('');
+            html += `</select>`;
+        } else if (f.type === 'file') {
+            const accept = String(f.accept || '');
+            html += `<input id="field-${f.key}" type="file"${accept ? ` accept="${accept}"` : ''}>`;
+            if (existingValues && existingValues.url) {
+                html += `<div class="hint">Fichier actuel: ${existingValues.url}</div>`;
+            }
         } else {
             html += `<div class="md-editor-wrap">
                 <div class="md-toolbar" role="toolbar" aria-label="Mise en forme">
@@ -196,6 +282,10 @@ export function openModal(type, existingValues = null) {
 
     document.getElementById('modal-body').innerHTML = html;
     document.getElementById('modal-overlay').classList.add('show');
+
+    if (type === 'audio') {
+        setupAudioModalInteractions();
+    }
 }
 
 export function closeModal() {
@@ -204,19 +294,28 @@ export function closeModal() {
     state.editingIndex = null;
 }
 
-export function submitBlock() {
-    const config = modalForms[state.currentModalType];
-    const data = {};
-    config.fields.forEach(f => {
-        const el = document.getElementById('field-' + f.key);
-        data[f.key] = el ? el.value : '';
-    });
+export async function submitBlock() {
+    try {
+        const config = modalForms[state.currentModalType];
+        const data = {};
+        config.fields.forEach(f => {
+            const el = document.getElementById('field-' + f.key);
+            if (!el) {
+                data[f.key] = '';
+                return;
+            }
+            if (f.type === 'file') {
+                data[f.key] = el.files && el.files.length ? el.files[0] : null;
+                return;
+            }
+            data[f.key] = el.value;
+        });
 
-    const parseYesNo = value => /^(1|true|vrai|oui|yes|y)$/i.test(String(value || '').trim());
+        const parseYesNo = value => /^(1|true|vrai|oui|yes|y)$/i.test(String(value || '').trim());
 
-    const newBlock = { id: 'b' + (++state.idCounter), type: state.currentModalType, visible: true };
+        const newBlock = { id: 'b' + (++state.idCounter), type: state.currentModalType, visible: true };
 
-    switch (state.currentModalType) {
+        switch (state.currentModalType) {
         case 'source-text':
             newBlock.author = data.author;
             newBlock.title = data.title;
@@ -285,6 +384,29 @@ export function submitBlock() {
             newBlock.mediaType = data.mediaType;
             newBlock.description = data.description;
             break;
+        case 'audio': {
+            newBlock.title = data.title;
+            newBlock.description = data.description;
+            newBlock.sourceMode = String(data.sourceMode || 'link');
+
+            const typedUrl = String(data.url || '').trim();
+            if (newBlock.sourceMode === 'upload') {
+                if (data.audioFile) {
+                    newBlock.url = await uploadAudioFile(data.audioFile);
+                    newBlock.uploaded = true;
+                } else if (typedUrl) {
+                    newBlock.url = typedUrl;
+                    newBlock.uploaded = false;
+                } else {
+                    throw new Error('Choisissez un fichier audio ou renseignez une URL.');
+                }
+            } else {
+                if (!typedUrl) throw new Error('Renseignez une URL audio valide.');
+                newBlock.url = typedUrl;
+                newBlock.uploaded = false;
+            }
+            break;
+        }
         case 'diagram':
             newBlock.title = data.title;
             newBlock.code = data.code;
@@ -387,16 +509,20 @@ export function submitBlock() {
             newBlock.advanced = data.advanced;
             newBlock.supported = data.supported;
             break;
-    }
+        }
 
-    // En mode édition, mettre à jour le bloc existant ; sinon insérer
-    if (state.editingIndex !== null) {
-        const existing = state.blocks[state.editingIndex];
-        Object.assign(existing, newBlock, { id: existing.id, visible: existing.visible });
-    } else {
-        state.blocks.splice(state.insertIndex + 1, 0, newBlock);
+        // En mode édition, mettre à jour le bloc existant ; sinon insérer
+        if (state.editingIndex !== null) {
+            const existing = state.blocks[state.editingIndex];
+            Object.assign(existing, newBlock, { id: existing.id, visible: existing.visible });
+        } else {
+            state.blocks.splice(state.insertIndex + 1, 0, newBlock);
+        }
+        closeModal();
+        renderBlocks();
+        save();
+    } catch (err) {
+        notifyError(err?.message || 'Impossible de sauvegarder ce bloc.');
+        console.error('[audio-block]', err);
     }
-    closeModal();
-    renderBlocks();
-    save();
 }

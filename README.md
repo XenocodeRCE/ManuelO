@@ -32,6 +32,7 @@ api/
   load.php          Charge un manuel par ID
   save.php          Sauvegarde un manuel (JSON)
   delete.php        Supprime un manuel
+  upload_audio.php  Upload de fichiers audio (max 50 Mo)
 manuals/            Dossier de stockage des fichiers JSON (créé automatiquement)
 ```
 

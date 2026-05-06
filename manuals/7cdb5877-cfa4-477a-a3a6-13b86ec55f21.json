@@ -205,6 +205,105 @@
             "visible": true,
             "number": "Section 1",
             "content": "C'est quoi une dissertation ?"
+        },
+        {
+            "id": "b200",
+            "type": "argument-map",
+            "visible": true,
+            "title": "La technique nous rend-elle plus libres ?",
+            "argMap": {
+                "id": "am-001",
+                "isExercise": false,
+                "showStrength": false,
+                "viewMode": "TREE",
+                "thesis": {
+                    "id": "an-root",
+                    "role": "THESIS",
+                    "content": "La technique est un moyen de libération humaine",
+                    "author": "Nous",
+                    "sourceRef": "",
+                    "externalUrl": "",
+                    "sourceText": "",
+                    "strength": "UNASSESSED",
+                    "isCollapsed": false,
+                    "isEditable": true,
+                    "isPlaceholder": false,
+                    "children": [
+                        {
+                            "id": "an-001",
+                            "role": "SUPPORT",
+                            "content": "La technique augmente nos capacités naturelles",
+                            "author": "",
+                            "sourceRef": "",
+                            "externalUrl": "",
+                            "sourceText": "",
+                            "strength": "STRONG",
+                            "isCollapsed": false,
+                            "isEditable": true,
+                            "isPlaceholder": false,
+                            "children": [
+                                {
+                                    "id": "an-001-1",
+                                    "role": "SUPPORT",
+                                    "content": "Exemple : la médecine nous sauve de maladies",
+                                    "author": "",
+                                    "sourceRef": "",
+                                    "externalUrl": "",
+                                    "sourceText": "",
+                                    "strength": "UNASSESSED",
+                                    "isCollapsed": false,
+                                    "isEditable": true,
+                                    "isPlaceholder": false,
+                                    "children": []
+                                }
+                            ]
+                        },
+                        {
+                            "id": "an-002",
+                            "role": "SUPPORT",
+                            "content": "La technologie crée de l'emploi et du progrès",
+                            "author": "",
+                            "sourceRef": "",
+                            "externalUrl": "",
+                            "sourceText": "",
+                            "strength": "MODERATE",
+                            "isCollapsed": false,
+                            "isEditable": true,
+                            "isPlaceholder": false,
+                            "children": []
+                        },
+                        {
+                            "id": "an-003",
+                            "role": "OBJECTION",
+                            "content": "La technique nous rend dépendants et déhumanise",
+                            "author": "",
+                            "sourceRef": "",
+                            "externalUrl": "",
+                            "sourceText": "",
+                            "strength": "STRONG",
+                            "isCollapsed": false,
+                            "isEditable": true,
+                            "isPlaceholder": false,
+                            "children": [
+                                {
+                                    "id": "an-003-1",
+                                    "role": "OBJECTION",
+                                    "content": "La dépendance aux appareils nous asservit",
+                                    "author": "",
+                                    "sourceRef": "",
+                                    "externalUrl": "",
+                                    "sourceText": "",
+                                    "strength": "WEAK",
+                                    "isCollapsed": false,
+                                    "isEditable": true,
+                                    "isPlaceholder": false,
+                                    "children": []
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
         }
     ]
 }

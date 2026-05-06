@@ -650,7 +650,8 @@
 }
 
 .form-group input,
-.form-group textarea {
+.form-group textarea,
+.form-group select {
     width: 100%;
     padding: 10px 14px;
     border: 2px solid var(--border);
@@ -662,7 +663,8 @@
 }
 
 .form-group input:focus,
-.form-group textarea:focus {
+.form-group textarea:focus,
+.form-group select:focus {
     outline: none;
     border-color: var(--text);
     box-shadow: 0 0 0 4px rgba(17, 24, 39, 0.08);

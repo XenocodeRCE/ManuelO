@@ -7,11 +7,13 @@ import { renderBlockContent } from './render.js';
 const BOOK_PAGE_WIDTH = 794;
 const BOOK_PAGE_HEIGHT = 1123;
 const PAGE_FIT_EPSILON = 2;
+const BOOK_SLICE_OVERLAP = 14;
 
 // ── Module state ─────────────────────────────────────────────────────────────
 let _pages       = [];    // [{num, title, subtitle, blocks[]}]
 let _spread      = 0;     // index of the left (or only) page currently shown
 let _mode        = 'double'; // 'double' | 'single'
+let _layoutPref  = 'auto';   // 'auto' | 'double' | 'single'
 let _hudTimer    = null;
 let _resizeTimer = null;
 let _touchStartX = null;
@@ -142,6 +144,10 @@ function _findBestFitCount(sourcePage, startIndex, withChapterHeader) {
 }
 
 function _paginateOversizedBlock(sourcePage, block, withChapterHeader) {
+    if (block?.type === 'source-text' || block?.type === 'citation') {
+        return _paginateSourceLikeOversizedBlock(sourcePage, block, withChapterHeader);
+    }
+
     const metrics = _measureBlockForSlicing(sourcePage, block, withChapterHeader);
     if (!metrics || metrics.sliceHeight <= 0 || metrics.blockHeight <= 0) {
         // Safe fallback: keep the raw block if measurement failed.
@@ -157,10 +163,12 @@ function _paginateOversizedBlock(sourcePage, block, withChapterHeader) {
 
     const pages = [];
     const sliceHeight = Math.max(1, Math.floor(metrics.sliceHeight));
-    const totalParts = Math.max(1, Math.ceil(metrics.blockHeight / sliceHeight));
+    const step = Math.max(1, sliceHeight - BOOK_SLICE_OVERLAP);
+    const totalParts = Math.max(1, Math.ceil((metrics.blockHeight - BOOK_SLICE_OVERLAP) / step));
 
     for (let part = 0; part < totalParts; part++) {
-        const offset = part * sliceHeight;
+        const offset = part * step;
+        if (offset >= metrics.blockHeight) break;
         const remaining = Math.max(1, metrics.blockHeight - offset);
         const viewport = Math.min(sliceHeight, remaining);
         const firstPart = part === 0;
@@ -177,12 +185,84 @@ function _paginateOversizedBlock(sourcePage, block, withChapterHeader) {
                 offset,
                 viewport,
                 part: part + 1,
-                totalParts
+                totalParts,
+                overlap: BOOK_SLICE_OVERLAP
             }]
         });
     }
 
     return pages;
+}
+
+function _paginateSourceLikeOversizedBlock(sourcePage, block, withChapterHeader) {
+    const isCitation = block?.type === 'citation';
+    const rawText = isCitation ? (block.quote || '') : (block.content || '');
+    const allLines = _splitBookLines(rawText, isCitation ? 78 : 84);
+
+    if (!allLines.length) {
+        return [{
+            sourceNum: sourcePage.sourceNum,
+            title: withChapterHeader ? sourcePage.title : '',
+            subtitle: withChapterHeader ? sourcePage.subtitle : '',
+            runningTitle: sourcePage.title || '',
+            continuation: !withChapterHeader,
+            blocks: [block]
+        }];
+    }
+
+    const chunks = [];
+    let cursor = 0;
+
+    while (cursor < allLines.length) {
+        const remaining = allLines.length - cursor;
+        let low = 1;
+        let high = remaining;
+        let best = 0;
+        const pageHasHeader = withChapterHeader && cursor === 0;
+
+        while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            const candidateLines = allLines.slice(cursor, cursor + mid);
+            const candidateItem = {
+                __bookLineSlice: true,
+                block,
+                lines: candidateLines,
+                isCitation,
+                showRef: true,
+                continuation: cursor > 0
+            };
+
+            const fits = _candidateFits(sourcePage, [candidateItem], pageHasHeader);
+            if (fits) {
+                best = mid;
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+
+        const take = Math.max(1, best);
+        chunks.push(allLines.slice(cursor, cursor + take));
+        cursor += take;
+    }
+
+    return chunks.map((lines, index) => ({
+        sourceNum: sourcePage.sourceNum,
+        title: withChapterHeader && index === 0 ? sourcePage.title : '',
+        subtitle: withChapterHeader && index === 0 ? sourcePage.subtitle : '',
+        runningTitle: sourcePage.title || '',
+        continuation: !(withChapterHeader && index === 0),
+        blocks: [{
+            __bookLineSlice: true,
+            block,
+            lines,
+            isCitation,
+            showRef: true,
+            continuation: index > 0,
+            part: index + 1,
+            totalParts: chunks.length
+        }]
+    }));
 }
 
 function _measureBlockForSlicing(sourcePage, block, withChapterHeader) {
@@ -249,6 +329,10 @@ function _destroyMeasureHost() {
 }
 
 function _detectMode() {
+    if (_layoutPref === 'single' || _layoutPref === 'double') {
+        _mode = _layoutPref;
+        return;
+    }
     _mode = window.innerWidth >= 1024 ? 'double' : 'single';
 }
 
@@ -275,6 +359,8 @@ export function enterBookView() {
     _applyTheme('light');
     const sel = document.getElementById('book-theme-select');
     if (sel) sel.value = 'light';
+    const layoutSel = document.getElementById('book-layout-select');
+    if (layoutSel) layoutSel.value = _layoutPref;
 
     // HUD title
     const titleEl = document.getElementById('book-hud-title');
@@ -357,6 +443,17 @@ export function bookSetTheme(theme) {
     _applyTheme(theme);
 }
 
+export function bookSetLayout(layout) {
+    const next = String(layout || 'auto');
+    _layoutPref = (next === 'single' || next === 'double') ? next : 'auto';
+    const prevMode = _mode;
+    _detectMode();
+    if (prevMode !== _mode && _mode === 'double') {
+        _spread = Math.floor(_spread / 2) * 2;
+    }
+    _renderSpread(false);
+}
+
 function _applyTheme(theme) {
     const overlay = document.getElementById('book-overlay');
     overlay.classList.remove('book-theme-light', 'book-theme-sepia', 'book-theme-dark');
@@ -418,13 +515,15 @@ function _renderPage(page, idx, side) {
     const runningCenter = side === 'center' ? `<span class="book-running">${_esc(state.meta.title || '')}</span>` : '';
 
     const pageNumAlignClass = side === 'right' ? 'book-pagenum-right' : '';
+    const titleClass = page.title ? (page.continuation ? 'book-page-chapter-title is-continuation' : 'book-page-chapter-title') : '';
 
     return `<div class="book-page-inner">
         <div class="book-page-header-line">
             ${runningLeft}${runningRight}${runningCenter}
         </div>
-        ${page.title ? `<div class="book-page-chapter-title">${_esc(page.title)}</div>` : ''}
+        ${page.title ? `<div class="${titleClass}">${_esc(page.title)}</div>` : ''}
         ${page.subtitle ? `<div class="book-page-chapter-subtitle">${_esc(page.subtitle)}</div>` : ''}
+        ${page.continuation ? `<div class="book-page-continuation">Suite du chapitre</div>` : ''}
         <div class="book-blocks">
             ${blocks || '<div class="book-page-empty-hint">Page vide</div>'}
         </div>
@@ -435,19 +534,154 @@ function _renderPage(page, idx, side) {
 }
 
 function _renderBlockItem(item) {
+    if (item && item.__bookLineSlice) {
+        return _renderBookSourceLikeBlockFromLines(item.block, item.lines || [], !!item.isCitation, {
+            showRef: item.showRef !== false,
+            continuation: !!item.continuation,
+            part: item.part || 1,
+            totalParts: item.totalParts || 1
+        });
+    }
+
     if (item && item.__bookSlice) {
         const safeOffset = Math.max(0, Math.floor(item.offset || 0));
         const safeViewport = Math.max(1, Math.floor(item.viewport || 1));
+        const sliceHtml = _renderBookBlockHtml(item.block);
         return `<div class="book-block book-block-slice">
             <div class="book-block-slice-viewport" style="height:${safeViewport}px;">
                 <div class="book-block-slice-content" style="transform: translateY(-${safeOffset}px);">
-                    ${renderBlockContent(item.block)}
+                    ${sliceHtml}
                 </div>
             </div>
         </div>`;
     }
 
+    return _renderBookBlockHtml(item);
+}
+
+function _renderBookBlockHtml(item) {
+    if (item?.type === 'source-text') {
+        return _renderBookSourceLikeBlock(item, false);
+    }
+
+    if (item?.type === 'citation') {
+        return _renderBookSourceLikeBlock(item, true);
+    }
+
+    const marginNote = _buildBookMarginNote(item);
+    if (marginNote) {
+        return `<div class="book-block book-margin-note-block ${marginNote.variant}">
+            <aside class="book-margin-note">
+                <div class="book-margin-note-label">${_esc(marginNote.label)}</div>
+                <div class="book-margin-note-body">${_esc(marginNote.body)}</div>
+            </aside>
+            <div class="book-margin-note-content">${renderBlockContent(item)}</div>
+        </div>`;
+    }
+
     return `<div class="book-block">${renderBlockContent(item)}</div>`;
+}
+
+function _buildBookMarginNote(item) {
+    if (!item || typeof item !== 'object') return null;
+
+    if (item.type === 'definition') {
+        const body = [item.term, _stripMarkdownForBook(item.content || '').slice(0, 90)].filter(Boolean).join(' - ');
+        return { label: 'Repère', body: body || 'Définition clé', variant: 'is-repere' };
+    }
+
+    return null;
+}
+
+function _stripMarkdownForBook(raw) {
+    return String(raw || '')
+        .replace(/\{([^|}]+)\|([^}]+)\}/g, '$1')
+        .replace(/\[(.*?)\]\((.*?)\)/g, '$1')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/__(.*?)__/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/[ \t]+/g, ' ')
+        .trim();
+}
+
+function _splitBookLines(text, maxChars = 84) {
+    const lines = [];
+    const paragraphs = String(text || '').split(/\r?\n/);
+
+    paragraphs.forEach((paragraph, paragraphIndex) => {
+        const normalized = _stripMarkdownForBook(paragraph);
+        if (!normalized) {
+            // Preserve explicit blank lines from the original content.
+            if (paragraphIndex !== paragraphs.length - 1) lines.push('');
+            return;
+        }
+
+        const words = normalized.split(' ').filter(Boolean);
+        let current = '';
+        words.forEach(word => {
+            const test = current ? `${current} ${word}` : word;
+            if (test.length <= maxChars || !current) {
+                current = test;
+                return;
+            }
+            lines.push(current);
+            current = word;
+        });
+        if (current) lines.push(current);
+
+        if (paragraphIndex !== paragraphs.length - 1) {
+            lines.push('');
+        }
+    });
+
+    return lines;
+}
+
+function _renderBookSourceLikeBlock(block, isCitation) {
+    const rawText = isCitation ? (block.quote || '') : (block.content || '');
+    const lines = _splitBookLines(rawText, isCitation ? 78 : 84);
+    const safeLines = lines.length ? lines : [''];
+    return _renderBookSourceLikeBlockFromLines(block, safeLines, isCitation, {
+        showRef: true,
+        continuation: false,
+        part: 1,
+        totalParts: 1
+    });
+}
+
+function _renderBookSourceLikeBlockFromLines(block, lines, isCitation, options = {}) {
+    const safeLines = lines.length ? lines : [''];
+    const ref = isCitation
+        ? [block.author, block.source].filter(Boolean).join(', ')
+        : [block.author, block.title, block.reference].filter(Boolean).join(', ');
+    const continuation = !!options.continuation;
+    const showRef = options.showRef !== false;
+    const part = Number(options.part || 1);
+    const totalParts = Number(options.totalParts || 1);
+    const partLabel = continuation
+        ? `<div class="book-source-part">Suite du texte${totalParts > 1 ? ` (${part}/${totalParts})` : ''}</div>`
+        : '';
+
+    let logicalLine = 0;
+    const lineHtml = safeLines.map(line => {
+        if (!String(line).trim()) {
+            return '<span class="book-source-break" aria-hidden="true"></span>';
+        }
+        logicalLine += 1;
+        const markerAttr = logicalLine % 5 === 0
+            ? ` class="book-source-line has-marker" data-line="${logicalLine}"`
+            : ' class="book-source-line"';
+        return `<span${markerAttr}>${_esc(line)}</span>`;
+    }).join('');
+
+    return `<div class="book-block book-source-modern${isCitation ? ' is-citation' : ''}">
+        ${partLabel}
+        <div class="book-source-lines">
+            ${lineHtml}
+        </div>
+        ${showRef && ref ? `<div class="book-source-ref">${_esc(ref)}</div>` : ''}
+    </div>`;
 }
 
 // ── Counter & thumbnail bar ───────────────────────────────────────────────────
@@ -456,10 +690,16 @@ function _updateCounter() {
     const el = document.getElementById('book-counter');
     if (!el) return;
     const total = _pages.length;
+    const leftSource = _pages[_spread]?.sourceNum || 1;
+    const rightSource = _pages[_spread + 1]?.sourceNum;
+    const sourceLabel = (_mode === 'double' && rightSource && rightSource !== leftSource)
+        ? `p. ${leftSource}-${rightSource}`
+        : `p. ${leftSource}`;
+
     if (_mode === 'double' && _spread + 1 < total) {
-        el.textContent = `${_spread + 1} – ${_spread + 2}  /  ${total}`;
+        el.textContent = `${sourceLabel} · ${_spread + 1}-${_spread + 2} / ${total}`;
     } else {
-        el.textContent = `${_spread + 1}  /  ${total}`;
+        el.textContent = `${sourceLabel} · ${_spread + 1} / ${total}`;
     }
     const prev = document.getElementById('book-prev-btn');
     const next = document.getElementById('book-next-btn');

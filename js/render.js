@@ -312,6 +312,28 @@ export function renderBlocks() {
     }
 
     updateCounter();
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Setup event listeners for Kialo argument-map SVG nodes
+    // ──────────────────────────────────────────────────────────────────────
+    container.querySelectorAll('.arg-node-svg').forEach(nodeEl => {
+        nodeEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const nodeId = nodeEl.getAttribute('data-node-id');
+            const blockId = nodeEl.getAttribute('data-block-id');
+            if (nodeId && blockId && window.argMapSelectNode) {
+                window.argMapSelectNode(blockId, nodeId);
+            }
+        });
+
+        // Add hover effect
+        nodeEl.addEventListener('mouseenter', () => {
+            nodeEl.classList.add('hovered');
+        });
+        nodeEl.addEventListener('mouseleave', () => {
+            nodeEl.classList.remove('hovered');
+        });
+    });
 }
 
 
@@ -534,6 +556,25 @@ export function renderBlockContent(block) {
                     ${!embedUrl && block.url ? `<a class="media-url" href="${block.url}" target="_blank" rel="noopener noreferrer">${block.url}</a>` : ''}
                     ${block.description ? `<div class="media-desc">${block.description}</div>` : ''}
                 </div>
+            </div>`;
+        }
+
+        case 'audio': {
+            const audioUrl = String(block.url || '').trim();
+            return `<div class="block-audio">
+                <div class="audio-header">
+                    <div class="audio-icon">🎧</div>
+                    <div class="audio-header-text">
+                        <div class="audio-title">${block.title ? parseInline(block.title) : 'Audio pedagogique'}</div>
+                        <div class="audio-type">${block.uploaded ? 'Fichier uploade' : 'Lien externe'}</div>
+                    </div>
+                </div>
+                ${audioUrl
+                    ? `<audio class="audio-player" controls preload="metadata" src="${audioUrl}"></audio>
+                       <a class="audio-url" href="${audioUrl}" target="_blank" rel="noopener noreferrer">Ouvrir le fichier audio</a>`
+                    : `<div class="audio-empty">Aucune source audio renseignee.</div>`
+                }
+                ${block.description ? `<div class="audio-desc">${parseMd(block.description)}</div>` : ''}
             </div>`;
         }
 
@@ -831,129 +872,296 @@ function escHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+function plainText(value) {
+    return String(value || '')
+        .replace(/\*\*|__|`|==|~~/g, '')
+        .replace(/\{([^|}]+)\|([^}]+)\}/g, '$1')
+        .replace(/\[[^\]]+\]\(([^)]+)\)/g, '$1')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function clipNodeText(value, maxLen = 88) {
+    const cleaned = plainText(value);
+    if (cleaned.length <= maxLen) return cleaned;
+    return `${cleaned.slice(0, maxLen).trimEnd()}...`;
+}
+
+function wrapNodeText(value, maxCharsPerLine = 22, maxLines = 3) {
+    const words = clipNodeText(value).split(' ').filter(Boolean);
+    if (!words.length) return ['Argument'];
+
+    const lines = [];
+    let current = '';
+    for (const word of words) {
+        const next = current ? `${current} ${word}` : word;
+        if (next.length <= maxCharsPerLine || !current) {
+            current = next;
+            continue;
+        }
+        lines.push(current);
+        current = word;
+        if (lines.length === maxLines - 1) break;
+    }
+
+    if (lines.length < maxLines && current) {
+        lines.push(current);
+    }
+
+    if (lines.length > maxLines) {
+        return lines.slice(0, maxLines);
+    }
+
+    if (words.length && lines.length === maxLines) {
+        const joined = lines.join(' ');
+        if (joined.length < plainText(value).length) {
+            lines[maxLines - 1] = `${lines[maxLines - 1].replace(/\.\.\.$/, '')}...`;
+        }
+    }
+
+    return lines;
+}
+
 function renderArgumentMapBlock(block) {
     const map = ensureArgumentMap(block);
     const layout = computeArgumentTreeLayout(map.thesis, 'TREE');
     const stanceById = computeArgumentStanceMap(map.thesis);
     const canEdit = state.mode === 'prof';
     const nodeById = new Map(layout.nodes.map(n => [n.id, n]));
+    const nodeWidth = 184;
+    const nodeHeight = 66;
+    const panelOpen = window.__argMapPanelState?.[String(block.id)] !== false;
 
-    const lines = layout.edges.map(edge => {
+    // ──────────────────────────────────────────────────────────────────────
+    // 1. RENDER SIBLING GROUPING BACKGROUNDS (gray bubbles)
+    // ──────────────────────────────────────────────────────────────────────
+    const siblingGroups = new Map();
+    layout.nodes.forEach(entry => {
+        if (entry.parentId) {
+            const key = `parent_${entry.parentId}`;
+            if (!siblingGroups.has(key)) {
+                siblingGroups.set(key, []);
+            }
+            siblingGroups.get(key).push(entry);
+        }
+    });
+
+    const siblingGroupSvg = Array.from(siblingGroups.values())
+        .filter(group => group.length > 1) // Only group if > 1 sibling
+        .map(group => {
+            const xs = group.map(n => n.x);
+            const ys = group.map(n => n.y);
+            const minX = Math.min(...xs) - 16;
+            const maxX = Math.max(...xs) + nodeWidth + 16;
+            const minY = Math.min(...ys) - 14;
+            const maxY = Math.max(...ys) + nodeHeight + 14;
+            
+            return `<rect x="${minX}" y="${minY}" width="${maxX - minX}" height="${maxY - minY}" 
+                           rx="8" ry="8" fill="rgba(0,0,0,0.05)" stroke="none" class="arg-sibling-group" />`;
+        }).join('');
+
+    // ──────────────────────────────────────────────────────────────────────
+    // 2. RENDER ORTHOGONAL EDGES (L-shaped paths)
+    // ──────────────────────────────────────────────────────────────────────
+    const edges = layout.edges.map(edge => {
         const from = nodeById.get(edge.from);
         const to = nodeById.get(edge.to);
         if (!from || !to) return '';
 
-        const edgeRole = to.node.role === 'OBJECTION' ? 'OBJECTION' : 'SUPPORT';
-        const childMeta = ARGUMENT_ROLE_META[edgeRole] || ARGUMENT_ROLE_META.SUPPORT;
+        const toNode = to.node;
+        const role = toNode.role === 'OBJECTION' ? 'OBJECTION' : 'SUPPORT';
+        const isRootThesis = from.node.role === 'THESIS';
 
-        const x1 = from.x;
-        const y1 = from.y + 50;
-        const x2 = to.x;
-        const y2 = to.y - 50;
-        const c1x = x1;
-        const c1y = y1 + 34;
-        const c2x = x2;
-        const c2y = y2 - 34;
+        // Colors for edges based on role
+        let edgeColor = '#00796B'; // Default: Pro/Support (teal)
+        if (role === 'OBJECTION') {
+            edgeColor = '#D84315'; // Con (red-orange)
+        }
 
-        return `<path d="M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}"
-                    stroke="${childMeta.color}"
-                    stroke-width="2"
-                    ${edgeRole === 'OBJECTION' ? 'stroke-dasharray="6 4"' : ''}
-                    fill="none" />`;
+        // Positions (node centers)
+        const x1 = from.x + nodeWidth / 2;
+        const y1 = from.y + nodeHeight;
+        const x2 = to.x + nodeWidth / 2;
+        const y2 = to.y;
+
+        // Orthogonal path: vertical then horizontal
+        const midY = (y1 + y2) / 2;
+        const d = `M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`;
+
+        return `<path d="${d}" 
+                       stroke="${edgeColor}" 
+                       stroke-width="2" 
+                       fill="none" 
+                       stroke-linecap="round"
+                       stroke-linejoin="round"
+                       class="arg-edge role-${role.toLowerCase()}" />`;
     }).join('');
 
-    const nodes = layout.nodes.map(entry => {
+    // ──────────────────────────────────────────────────────────────────────
+    // 3. RENDER RECTANGULAR NODES (SVG rect + text)
+    // ──────────────────────────────────────────────────────────────────────
+    const nodeElements = layout.nodes.map(entry => {
         const node = entry.node;
-        const role = node.role === 'THESIS' ? 'THESIS' : (node.role === 'OBJECTION' ? 'OBJECTION' : 'SUPPORT');
-        const meta = ARGUMENT_ROLE_META[role] || ARGUMENT_ROLE_META.SUPPORT;
-        const stance = stanceById.get(String(node.id));
-        const hasChildren = (node.children || []).length > 0;
-        const nodeContent = (node.content || '').trim()
-            ? parseMd(node.content)
-            : `<div class="arg-node-placeholder">Cliquez sur Modifier pour ajouter un argument...</div>`;
+        const role = node.role;
+        const nodeId = node.id;
+        const blockId = block.id;
 
-        const sourceButtons = [
-            node.sourceRef
-                ? `<button class="arg-node-link-btn" onclick="argMapJumpToSource('${escHtml(block.id)}','${escHtml(node.id)}')">📖 Bloc ${escHtml(node.sourceRef)}</button>`
-                : '',
-            node.externalUrl
-                ? `<a class="arg-node-link-btn external" href="${escHtml(node.externalUrl)}" target="_blank" rel="noopener noreferrer">🌐 Lien externe</a>`
-                : ''
-        ].filter(Boolean).join('');
+        // Kialo colors
+        let fillColor = '#ffffff';
+        let borderColor = '#00796B'; // Default: teal (pro)
+        let borderWidth = 2;
 
-        const sourceText = node.sourceText
-            ? `<div class="arg-node-source-text">${parseInline(node.sourceText)}</div>`
-            : '';
+        if (role === 'THESIS') {
+            fillColor = '#1565C0';    // Blue
+            borderColor = '#1565C0';
+        } else if (role === 'OBJECTION') {
+            fillColor = '#ffffff';
+            borderColor = '#D84315';  // Red-orange
+        } else {
+            // SUPPORT
+            fillColor = '#ffffff';
+            borderColor = '#00796B';  // Teal
+        }
 
-        const thesisStanceBadge = stance?.isThesis
-            ? '<div class="arg-node-thesis-stance thesis">These centrale</div>'
-            : (stance?.supportsThesis
-                ? '<div class="arg-node-thesis-stance for">Soutient la these</div>'
-                : '<div class="arg-node-thesis-stance against">Contredit la these</div>');
+        // Node dimensions
+        const rectX = entry.x;
+        const rectY = entry.y;
 
-        const parentRelationBadge = role === 'THESIS'
-            ? ''
-            : (role === 'SUPPORT'
-                ? '<div class="arg-node-parent-link for">Pour ce point</div>'
-                : '<div class="arg-node-parent-link against">Contre ce point</div>');
+        const nodeText = clipNodeText(node.content || (role === 'THESIS' ? 'Thèse' : 'Nouvel argument'), 90);
+        const nodeLines = wrapNodeText(nodeText, 21, 3);
+        const textColor = role === 'THESIS' ? '#ffffff' : '#000000';
+        const roleShort = role === 'THESIS' ? 'T' : (role === 'OBJECTION' ? '−' : '+');
+        const roleLabel = role === 'THESIS' ? 'Thèse' : (role === 'OBJECTION' ? 'Contre' : 'Pour');
+        const lineStartY = rectY + 34;
+        const tspans = nodeLines.map((line, index) => `<tspan x="${rectX + 14}" dy="${index === 0 ? 0 : 13}">${escHtml(line)}</tspan>`).join('');
 
-        const editControls = canEdit
-            ? `<div class="arg-node-actions">
-                <div class="arg-node-add-actions">
-                    <button class="arg-node-action" title="Ajouter un argument POUR" onclick="argMapAddNode('${escHtml(block.id)}','${escHtml(node.id)}','SUPPORT')">+ Pour</button>
-                    <button class="arg-node-action" title="Ajouter un argument CONTRE" onclick="argMapAddNode('${escHtml(block.id)}','${escHtml(node.id)}','OBJECTION')">+ Contre</button>
-                </div>
-                <div class="arg-node-main-actions">
-                    ${node.role !== 'THESIS' ? `<button class="arg-node-action" onclick="argMapToggleNodeRole('${escHtml(block.id)}','${escHtml(node.id)}')">${role === 'SUPPORT' ? 'Passer en Contre' : 'Passer en Pour'}</button>` : ''}
-                    <button class="arg-node-action" onclick="argMapEditNode('${escHtml(block.id)}','${escHtml(node.id)}')">Modifier</button>
-                    ${node.role !== 'THESIS' ? `<button class="arg-node-action danger" onclick="argMapDeleteNode('${escHtml(block.id)}','${escHtml(node.id)}')">Suppr.</button>` : ''}
-                </div>
-            </div>`
-            : '';
+        const rectSvg = `<g class="arg-node-svg role-${role.toLowerCase()}" 
+                            data-node-id="${escHtml(nodeId)}" 
+                            data-block-id="${escHtml(blockId)}"
+                            onclick="argMapSelectNode('${escHtml(blockId)}', '${escHtml(nodeId)}')"
+                            style="cursor: pointer;">
+                    <rect x="${rectX}" y="${rectY}" 
+                          width="${nodeWidth}" height="${nodeHeight}" 
+                          rx="4" ry="4"
+                          fill="${fillColor}" 
+                          stroke="${borderColor}" 
+                          stroke-width="${borderWidth}"
+                          class="arg-rect" />
+                      <text x="${rectX + 14}" y="${rectY + 16}"
+                          font-size="10"
+                          font-weight="800"
+                          fill="${textColor}"
+                          class="arg-label arg-label-role">${roleShort} ${escHtml(roleLabel)}</text>
+                      <text x="${rectX + 14}" y="${lineStartY}"
+                          font-size="11"
+                          font-weight="600"
+                          fill="${textColor}"
+                          class="arg-label arg-label-text">${tspans}</text>
+                </g>`;
 
-        const collapseBtn = hasChildren
-            ? `<button class="arg-node-collapse" onclick="argMapToggleNode('${escHtml(block.id)}','${escHtml(node.id)}')">${node.isCollapsed ? 'Déplier' : 'Replier'} (${node.children.length})</button>`
-            : '';
-
-        return `<div class="arg-node role-${node.role.toLowerCase()}"
-            style="left:${entry.x}px;top:${entry.y}px;--arg-role:${meta.color};"
-            data-node-id="${escHtml(node.id)}"
-            data-block-id="${escHtml(block.id)}"
-            ${canEdit && node.role !== 'THESIS' ? 'draggable="true"' : ''}
-            ${canEdit ? `ondragover="argMapAllowNodeDrop(event)" ondragenter="argMapEnterNodeDropTarget(event)" ondragleave="argMapLeaveNodeDropTarget(event)" ondrop="argMapDropNode(event)"` : ''}
-            ${canEdit && node.role !== 'THESIS' ? `ondragstart="argMapStartNodeDrag(event)" ondragend="argMapEndNodeDrag()"` : ''}>
-            <div class="arg-node-role">${meta.short} · ${meta.label}${canEdit && node.role !== 'THESIS' ? '<span class="arg-node-drag-hint"> Glisser pour deplacer</span>' : ''}</div>
-            ${thesisStanceBadge}
-            ${parentRelationBadge}
-            <div class="arg-node-content">${nodeContent}</div>
-            ${node.author ? `<div class="arg-node-author">— ${escHtml(node.author)}</div>` : ''}
-            ${sourceButtons ? `<div class="arg-node-links">${sourceButtons}</div>` : ''}
-            ${sourceText}
-            ${collapseBtn}
-            ${editControls}
-        </div>`;
+        return rectSvg;
     }).join('');
 
-    return `<div class="block-argument-map">
+    // ──────────────────────────────────────────────────────────────────────
+    // 4. BUILD COMPLETE SVG
+    // ──────────────────────────────────────────────────────────────────────
+    const svgContent = `<svg class="argmap-svg-kialo" viewBox="0 0 ${layout.width} ${layout.height}" 
+                              style="width: 100%; height: 100%; min-height: 400px;">
+        <!-- Sibling grouping backgrounds -->
+        <g class="sibling-groups">
+            ${siblingGroupSvg}
+        </g>
+        <!-- Edges (orthogonal paths) -->
+        <g class="edges">
+            ${edges}
+        </g>
+        <!-- Nodes (rectangles with text labels) -->
+        <g class="nodes">
+            ${nodeElements}
+        </g>
+    </svg>`;
+
+    // ──────────────────────────────────────────────────────────────────────
+    // 5. RENDER NODE DETAIL PANEL (pre-filled with thesis)
+    // ──────────────────────────────────────────────────────────────────────
+    const thesisDetailHTML = buildArgumentNodeDetailPanelHTML(
+        block.id,
+        map.thesis,
+        canEdit
+    );
+    const nodeDetailPanel = `<div class="argmap-detail-panel" id="argmap-detail-${escHtml(block.id)}">
+        ${thesisDetailHTML}
+    </div>`;
+
+    // ──────────────────────────────────────────────────────────────────────
+    // 6. ASSEMBLE FINAL BLOCK HTML
+    // ──────────────────────────────────────────────────────────────────────
+    return `<div class="block-argument-map kialo-style${panelOpen ? '' : ' is-panel-collapsed'}" data-block-id="${escHtml(block.id)}">
         <div class="argmap-header">
             <div class="argmap-title-wrap">
                 <div class="argmap-title">🗺️ ${escHtml(block.title || 'Carte d\'argument interactive')}</div>
                 ${map.isExercise ? '<span class="argmap-badge">Mode exercice</span>' : ''}
-                <span class="argmap-tree-pill">Tree (style Kialo)</span>
             </div>
-            ${canEdit ? `<div class="argmap-toolbar">
-                <button onclick="argMapEditNode('${escHtml(block.id)}','${escHtml(map.thesis.id)}')">Modifier la thèse</button>
-            </div>` : ''}
+            <div class="argmap-toolbar">
+                <button type="button" class="argmap-toolbar-btn" onclick="argMapToggleDetailPanel('${escHtml(block.id)}')">${panelOpen ? 'Masquer le panneau' : 'Afficher le panneau'}</button>
+                ${canEdit ? `<button type="button" class="argmap-toolbar-btn" onclick="argMapEditThesis('${escHtml(block.id)}','${escHtml(map.thesis.id)}')">Modifier thèse</button>` : ''}
+            </div>
         </div>
 
         <div class="argmap-canvas-wrap">
-            <div class="argmap-canvas" style="width:${layout.width}px;height:${layout.height}px;">
-                <svg class="argmap-lines" viewBox="0 0 ${layout.width} ${layout.height}" preserveAspectRatio="none">
-                    ${lines}
-                </svg>
-                ${nodes}
+            <div class="argmap-main">
+                ${svgContent}
             </div>
+            <button type="button" class="argmap-panel-peek" onclick="argMapToggleDetailPanel('${escHtml(block.id)}', true)">Détails</button>
+            ${nodeDetailPanel}
         </div>
+    </div>`;
+}
+
+function buildArgumentNodeDetailPanelHTML(blockId, node, canEdit) {
+    const role = node.role;
+    const roleLabel = role === 'THESIS' ? 'Thèse' : (role === 'OBJECTION' ? 'Argument contre' : 'Argument pour');
+    
+    const content = node.content ? parseMd(node.content) : '<em>Aucun contenu</em>';
+    const author = node.author ? `<div class="detail-author">— ${escHtml(node.author)}</div>` : '';
+    
+    // Buttons to add children
+    const addButtons = `
+        <div class="detail-add-buttons">
+            <button type="button" class="btn btn-sm btn-success" onclick="argMapAddNode('${escHtml(blockId)}', '${escHtml(node.id)}', 'SUPPORT')">+ Pour</button>
+            <button type="button" class="btn btn-sm btn-danger" onclick="argMapAddNode('${escHtml(blockId)}', '${escHtml(node.id)}', 'OBJECTION')">+ Contre</button>
+        </div>
+    `;
+    
+    // Edit button
+    const editBtn = canEdit ? `
+        <div class="detail-edit-buttons">
+            <button type="button" class="btn btn-sm btn-primary" onclick="argMapEditNode('${escHtml(blockId)}', '${escHtml(node.id)}')">✎ Modifier thèse</button>
+        </div>
+    ` : '';
+    
+    // Link buttons
+    const linkBtns = [
+        node.sourceRef ? `<button type="button" class="btn btn-link btn-sm" onclick="argMapJumpToSource('${escHtml(blockId)}', '${escHtml(node.id)}')">📖 Bloc source</button>` : '',
+        node.externalUrl ? `<a class="btn btn-link btn-sm" href="${escHtml(node.externalUrl)}" target="_blank" rel="noopener noreferrer">🌐 Lien externe</a>` : ''
+    ].filter(Boolean).join('');
+    
+    const sourceText = node.sourceText ? `<div class="detail-source-text"><small>${parseInline(node.sourceText)}</small></div>` : '';
+    
+    return `<div class="detail-content">
+        <div class="detail-header">
+            <span class="detail-role-badge" style="background: #1565C0; color: white; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600;">
+                ${roleLabel}
+            </span>
+            <button type="button" class="argmap-detail-close" onclick="argMapToggleDetailPanel('${escHtml(blockId)}', false)">Masquer</button>
+        </div>
+        <div class="detail-text">${content}</div>
+        ${author}
+        ${sourceText}
+        ${linkBtns ? `<div class="detail-links">${linkBtns}</div>` : ''}
+        ${addButtons}
+        ${editBtn}
     </div>`;
 }
 
@@ -978,6 +1186,7 @@ export function getPages() {
         blockIndex: r.pbIndex
     }));
 }
+
 
 export function renderSidebar() {
     const m = state.meta;

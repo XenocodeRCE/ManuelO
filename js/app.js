@@ -11,10 +11,10 @@ import { renderBlocks, renderSidebar, getPages } from './render.js';
 import { moveBlock, toggleVisibility, deleteBlock, selectQcm } from './actions.js';
 import { openModal, closeModal, submitBlock } from './modal.js';
 import { save, saveNow } from './save.js';
-import { toggleVocabTooltip } from './markdown.js';
+import { toggleVocabTooltip, parseInline, parseMd } from './markdown.js';
 import { enterPresentation, exitPresentation, presGo } from './presentation.js';
 import { openPdfExport, closePdfExport, closePdfExportOnOverlay, launchPrint } from './pdf.js';
-import { enterBookView, exitBookView, bookGo, bookGoTo, bookSetTheme } from './book.js';
+import { enterBookView, exitBookView, bookGo, bookGoTo, bookSetTheme, bookSetLayout } from './book.js';
 import {
     addArgumentChild,
     ensureArgumentMap,
@@ -40,6 +40,7 @@ const BLOCKS_CATALOG = [
             { type: 'table',          icon: '📊', label: 'Tableau',              desc: 'Tableau de données structurées',       color: '#f0fdf4', tc: '#15803d' },
             { type: 'link',           icon: '🔗', label: 'Lien / QR Code',       desc: 'Vers une ressource externe',           color: '#f0f9ff', tc: '#0369a1' },
             { type: 'media',          icon: '🎬', label: 'Vidéo / Audio',        desc: 'Ressource multimédia',                 color: '#fdf4ff', tc: '#9333ea' },
+            { type: 'audio',          icon: '🎧', label: 'Audio',                desc: 'Lecteur audio (lien ou upload)',       color: '#ecfeff', tc: '#0e7490' },
             { type: 'diagram',        icon: '📐', label: 'Schéma / Diagramme',   desc: 'Diagramme Mermaid ou légende',         color: '#ecfdf5', tc: '#0f766e' },
             { type: 'timeline',       icon: '🗺️', label: 'Frise chronologique', desc: 'Événements dans le temps',             color: '#fff7ed', tc: '#c2410c' },
         ]
@@ -204,11 +205,21 @@ function shortText(value, maxLen = 120) {
 }
 
 // ===== REFRESH (renderBlocks + sommaire synchronisé) =====
-function refresh() {
+function refresh({ preserveScroll = false, afterRender = null } = {}) {
+    const contentArea = document.getElementById('content-area');
+    const scrollTop = preserveScroll && contentArea ? contentArea.scrollTop : null;
     ensureRevisionState();
     renderBlocks();
     renderSidebarSommaire();
     renderRevisionPanel();
+
+    if (preserveScroll && contentArea && typeof scrollTop === 'number') {
+        contentArea.scrollTop = scrollTop;
+    }
+
+    if (typeof afterRender === 'function') {
+        requestAnimationFrame(() => afterRender());
+    }
 }
 
 // ===== MODE =====
@@ -1335,7 +1346,7 @@ function _getBlockIndexById(blockId) {
     return state.blocks.findIndex(b => String(b.id) === String(blockId));
 }
 
-function _withArgumentMap(blockId, mutator, { persist = true } = {}) {
+function _withArgumentMap(blockId, mutator, { persist = true, preserveScroll = true, afterRender = null } = {}) {
     const idx = _getBlockIndexById(blockId);
     if (idx < 0) return false;
     const block = state.blocks[idx];
@@ -1343,7 +1354,7 @@ function _withArgumentMap(blockId, mutator, { persist = true } = {}) {
     const map = ensureArgumentMap(block);
     const changed = mutator(block, map);
     if (!changed) return false;
-    refresh();
+    refresh({ preserveScroll, afterRender });
     if (persist) save();
     return true;
 }
@@ -1354,6 +1365,7 @@ function argMapAddNode(blockId, parentId, role) {
         return;
     }
 
+    let createdNodeId = null;
     _withArgumentMap(blockId, (_block, map) => {
         const node = addArgumentChild(map.thesis, parentId, role, {
             author: 'Prof',
@@ -1363,7 +1375,15 @@ function argMapAddNode(blockId, parentId, role) {
             showToast('Nœud parent introuvable.', 'error');
             return false;
         }
+        createdNodeId = node.id;
         return true;
+    }, {
+        preserveScroll: true,
+        afterRender: () => {
+            if (createdNodeId) {
+                argMapSelectNode(blockId, createdNodeId);
+            }
+        }
     });
 }
 
@@ -1626,6 +1646,9 @@ function argMapToggleNode(blockId, nodeId) {
             return false;
         }
         return true;
+    }, {
+        preserveScroll: true,
+        afterRender: () => argMapSelectNode(blockId, nodeId)
     });
 }
 
@@ -1635,6 +1658,15 @@ function argMapDeleteNode(blockId, nodeId) {
         return;
     }
 
+    let parentId = null;
+    const idx = _getBlockIndexById(blockId);
+    if (idx >= 0) {
+        const block = state.blocks[idx];
+        const map = ensureArgumentMap(block);
+        const found = findArgumentNode(map.thesis, nodeId);
+        parentId = found?.parent?.id || map.thesis.id;
+    }
+
     _withArgumentMap(blockId, (_block, map) => {
         const ok = removeArgumentNode(map.thesis, nodeId);
         if (!ok) {
@@ -1642,6 +1674,13 @@ function argMapDeleteNode(blockId, nodeId) {
             return false;
         }
         return true;
+    }, {
+        preserveScroll: true,
+        afterRender: () => {
+            if (parentId) {
+                argMapSelectNode(blockId, parentId);
+            }
+        }
     });
 }
 
@@ -1684,7 +1723,10 @@ function argMapEditNode(blockId, nodeId) {
             externalUrl: cleanUrl,
             sourceText: String(values.sourceText || '').trim(),
             isPlaceholder: !String(values.content || '').trim()
-        }));
+        }), {
+            preserveScroll: true,
+            afterRender: () => argMapSelectNode(blockId, nodeId)
+        });
 
         if (!updated) {
             showToast('Nœud introuvable.', 'error');
@@ -1699,6 +1741,9 @@ function argMapToggleNodeRoleAction(blockId, nodeId) {
     _withArgumentMap(blockId, (_block, map) => {
         const ok = toggleArgumentNodeRole(map.thesis, nodeId);
         return !!ok;
+    }, {
+        preserveScroll: true,
+        afterRender: () => argMapSelectNode(blockId, nodeId)
     });
 }
 
@@ -1750,6 +1795,117 @@ function argMapJumpToSource(blockId, nodeId) {
     showToast('Aucune source liée à ce nœud.', 'info');
 }
 
+// ===== NEW KIALO FUNCTIONS =====
+
+window.__argMapPanelState = window.__argMapPanelState || {};
+
+function argMapIsDetailPanelOpen(blockId) {
+    return window.__argMapPanelState[String(blockId)] !== false;
+}
+
+function argMapToggleDetailPanel(blockId, forceOpen = null) {
+    const key = String(blockId);
+    const currentOpen = argMapIsDetailPanelOpen(key);
+    const nextOpen = forceOpen === null ? !currentOpen : !!forceOpen;
+    window.__argMapPanelState[key] = nextOpen;
+
+    const container = document.querySelector(`.block-argument-map[data-block-id="${escHtml(key)}"]`);
+    if (!container) {
+        console.debug('[argmap] panel toggle target not found', { blockId: key, nextOpen });
+        return;
+    }
+
+    container.classList.toggle('is-panel-collapsed', !nextOpen);
+    console.debug('[argmap] panel toggled', { blockId: key, nextOpen });
+
+    const toolbarBtn = container.querySelector('.argmap-toolbar .argmap-toolbar-btn');
+    if (toolbarBtn) {
+        toolbarBtn.textContent = nextOpen ? 'Masquer le panneau' : 'Afficher le panneau';
+    }
+}
+
+function argMapSelectNode(blockId, nodeId) {
+    // Highlights the selected node and shows detail panel
+    const container = document.querySelector(`[data-block-id="${escHtml(blockId)}"]`)?.closest('.block-argument-map');
+    if (!container) return;
+
+    // Clear previous selection
+    container.querySelectorAll('.arg-node-svg').forEach(el => el.classList.remove('selected'));
+    
+    // Select new node
+    const nodeEl = container.querySelector(`[data-node-id="${escHtml(nodeId)}"]`);
+    if (nodeEl) {
+        nodeEl.classList.add('selected');
+    }
+
+    // Show detail panel (if exists)
+    const detailPanel = container.querySelector(`#argmap-detail-${escHtml(blockId)}`);
+    if (detailPanel) {
+        const idx = _getBlockIndexById(blockId);
+        if (idx >= 0) {
+            const block = state.blocks[idx];
+            const map = ensureArgumentMap(block);
+            const found = findArgumentNode(map.thesis, nodeId);
+            if (found && found.node) {
+                detailPanel.innerHTML = _buildArgNodeDetailPanel(blockId, found.node, state.mode === 'prof');
+                detailPanel.style.display = 'block';
+            }
+        }
+    }
+}
+
+function argMapEditThesis(blockId, thesisId) {
+    // Edit the root thesis - same as argMapEditNode
+    argMapEditNode(blockId, thesisId);
+}
+
+function _buildArgNodeDetailPanel(blockId, node, canEdit) {
+    const role = node.role;
+    const roleLabel = role === 'THESIS' ? 'Thèse' : (role === 'OBJECTION' ? 'Argument contre' : 'Argument pour');
+    
+    const content = node.content ? parseMd(node.content) : '<em>Aucun contenu</em>';
+    const author = node.author ? `<div class="detail-author">— ${escHtml(node.author)}</div>` : '';
+    
+    // Buttons to add children
+    const addButtons = (role === 'THESIS' || canEdit) ? `
+        <div class="detail-add-buttons">
+            <button type="button" class="btn btn-sm btn-success" onclick="argMapAddNode('${escHtml(blockId)}', '${escHtml(node.id)}', 'SUPPORT')">+ Pour</button>
+            <button type="button" class="btn btn-sm btn-danger" onclick="argMapAddNode('${escHtml(blockId)}', '${escHtml(node.id)}', 'OBJECTION')">+ Contre</button>
+        </div>
+    ` : '';
+    
+    // Edit/Delete buttons
+    const editDeleteBtns = canEdit ? `
+        <div class="detail-edit-buttons">
+            <button type="button" class="btn btn-sm btn-primary" onclick="argMapEditNode('${escHtml(blockId)}', '${escHtml(node.id)}')">✎ Modifier</button>
+            ${role !== 'THESIS' ? `<button type="button" class="btn btn-sm btn-danger" onclick="argMapDeleteNode('${escHtml(blockId)}', '${escHtml(node.id)}')">✕ Supprimer</button>` : ''}
+        </div>
+    ` : '';
+    
+    // Link buttons
+    const linkBtns = [
+        node.sourceRef ? `<button type="button" class="btn btn-link btn-sm" onclick="argMapJumpToSource('${escHtml(blockId)}', '${escHtml(node.id)}')">📖 Bloc source</button>` : '',
+        node.externalUrl ? `<a class="btn btn-link btn-sm" href="${escHtml(node.externalUrl)}" target="_blank" rel="noopener noreferrer">🌐 Lien externe</a>` : ''
+    ].filter(Boolean).join('');
+    
+    const sourceText = node.sourceText ? `<div class="detail-source-text"><small>${parseInline(node.sourceText)}</small></div>` : '';
+    
+    return `<div class="detail-content">
+        <div class="detail-header">
+            <span class="detail-role-badge" style="background: ${role === 'THESIS' ? '#1565C0' : (role === 'OBJECTION' ? '#D84315' : '#00796B')}">
+                ${roleLabel}
+            </span>
+            <button type="button" class="argmap-detail-close" onclick="argMapToggleDetailPanel('${escHtml(blockId)}', false)">Masquer</button>
+        </div>
+        <div class="detail-text">${content}</div>
+        ${author}
+        ${sourceText}
+        ${linkBtns ? `<div class="detail-links">${linkBtns}</div>` : ''}
+        ${addButtons}
+        ${editDeleteBtns}
+    </div>`;
+}
+
 // ===== DIAGRAMME — BASCULER CODE ↔ RENDU =====
 function toggleDiagramView(btn) {
     const container = btn.closest('.block-diagram');
@@ -1779,6 +1935,10 @@ window.argMapDeleteNode = argMapDeleteNode;
 window.argMapEditNode = argMapEditNode;
 window.argMapToggleNodeRole = argMapToggleNodeRoleAction;
 window.argMapJumpToSource = argMapJumpToSource;
+window.argMapSelectNode = argMapSelectNode;
+window.argMapEditThesis = argMapEditThesis;
+window.argMapToggleDetailPanel = argMapToggleDetailPanel;
+window.argMapIsDetailPanelOpen = argMapIsDetailPanelOpen;
 
 // ===== TIMER =====
 let _timerTotal     = 0;
@@ -1903,6 +2063,7 @@ window.exitBookView   = exitBookView;
 window.bookGo         = bookGo;
 window.bookGoTo       = bookGoTo;
 window.bookSetTheme   = bookSetTheme;
+window.bookSetLayout  = bookSetLayout;
 window.enterPresentation = enterPresentation;
 window.exitPresentation  = exitPresentation;
 window.presGo            = presGo;

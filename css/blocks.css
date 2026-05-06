@@ -1051,6 +1051,77 @@
 }
 .media-desc { font-size: 12px; color: var(--text-secondary); }
 
+/* ===== BLOCK: AUDIO ===== */
+.block-audio {
+    background: white;
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    box-shadow: var(--shadow-sm);
+    border: 1.5px solid #bae6fd;
+}
+
+.audio-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.audio-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: #ecfeff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+}
+
+.audio-header-text {
+    min-width: 0;
+}
+
+.audio-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.audio-type {
+    margin-top: 2px;
+    font-size: 11px;
+    color: #0e7490;
+    font-weight: 600;
+}
+
+.audio-player {
+    width: 100%;
+    margin: 4px 0 8px;
+}
+
+.audio-url {
+    display: inline-block;
+    font-size: 12px;
+    color: #0e7490;
+    word-break: break-all;
+}
+
+.audio-empty {
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 8px 10px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.audio-desc {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
 /* ===== BLOCK: DIAGRAM ===== */
 .block-diagram {
     background: white;
@@ -2188,6 +2259,7 @@
 [data-theme="dark"] .block-exercise-table,
 [data-theme="dark"] .block-exercise-document,
 [data-theme="dark"] .block-media,
+[data-theme="dark"] .block-audio,
 [data-theme="dark"] .block-diagram,
 [data-theme="dark"] .block-link,
 [data-theme="dark"] .block-table,
@@ -2204,6 +2276,21 @@
 
 [data-theme="dark"] .source-content {
     background: #252d3d;
+}
+
+[data-theme="dark"] .audio-icon {
+    background: #1f2937;
+}
+
+[data-theme="dark"] .audio-type,
+[data-theme="dark"] .audio-url {
+    color: #67e8f9;
+}
+
+[data-theme="dark"] .audio-empty {
+    background: #252d3d;
+    border-color: var(--border);
+    color: var(--text-secondary);
 }
 
 [data-theme="dark"] .written-textarea,
@@ -2295,6 +2382,423 @@
 }
 [data-theme="dark"] .timeline-line {
     background: var(--border);
+}
+
+[data-theme="dark"] .block-argument-map {
+    background: #1e2330;
+    border-color: var(--border);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────*/
+/* KIALO-STYLE ARGUMENT MAP REDESIGN */
+/* ───────────────────────────────────────────────────────────────────────────*/
+
+.block-argument-map.kialo-style {
+    background: linear-gradient(180deg, #fafbfc 0%, #f5f6f8 100%);
+    border: 1px solid #e5e7eb;
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.block-argument-map.kialo-style.is-panel-collapsed .argmap-canvas-wrap {
+    grid-template-columns: minmax(0, 1fr) 0;
+}
+
+.argmap-main {
+    position: relative;
+    width: 100%;
+    overflow: auto;
+    background: white;
+    min-height: 400px;
+}
+
+.argmap-svg-kialo {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.argmap-canvas-wrap {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    align-items: stretch;
+}
+
+/* Sibling grouping backgrounds (gray bubbles) */
+.arg-sibling-group {
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.03));
+}
+
+/* Node SVG elements */
+.arg-node-svg {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.arg-node-svg:hover .arg-rect {
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
+}
+
+.arg-node-svg.selected .arg-rect {
+    stroke-width: 4;
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.18));
+}
+
+.arg-node-svg.selected .arg-label-text {
+    font-weight: 700;
+}
+
+.arg-rect {
+    transition: all 0.2s ease;
+}
+
+.arg-label {
+    pointer-events: none;
+}
+
+.arg-label-role {
+    letter-spacing: 0.2px;
+}
+
+.arg-label-text {
+    line-height: 1.2;
+}
+
+/* Role-specific rect styles */
+.arg-node-svg.role-thesis .arg-rect {
+    fill: #1565C0;
+    stroke: #1565C0;
+}
+
+.arg-node-svg.role-support .arg-rect {
+    fill: #ffffff;
+    stroke: #00796B;
+}
+
+.arg-node-svg.role-objection .arg-rect {
+    fill: #ffffff;
+    stroke: #D84315;
+}
+
+/* Hover effect for edges */
+.arg-edge {
+    transition: all 0.2s ease;
+}
+
+.arg-edge.role-support {
+    stroke: #00796B;
+}
+
+.arg-edge.role-objection {
+    stroke: #D84315;
+}
+
+/* Active path highlighting (thick lines) */
+.arg-edge.active {
+    stroke-width: 5;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+/* Detail panel for showing node info */
+.argmap-detail-panel {
+    position: relative;
+    width: 320px;
+    height: 100%;
+    background: white;
+    border-left: 1px solid #e5e7eb;
+    padding: 16px;
+    overflow-y: auto;
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.08);
+    font-size: 14px;
+    transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.block-argument-map.kialo-style.is-panel-collapsed .argmap-detail-panel {
+    transform: translateX(12px);
+    opacity: 0;
+    pointer-events: none;
+    overflow: hidden;
+    padding-left: 0;
+    padding-right: 0;
+    border-left-width: 0;
+}
+
+.argmap-panel-peek {
+    position: absolute;
+    top: 14px;
+    right: 12px;
+    z-index: 3;
+    border: 1px solid #c7d2fe;
+    background: rgba(255, 255, 255, 0.95);
+    color: #1e3a8a;
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    display: none;
+}
+
+.block-argument-map.kialo-style.is-panel-collapsed .argmap-panel-peek {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.detail-content {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.detail-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: space-between;
+}
+
+.detail-role-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: white !important;
+}
+
+.argmap-detail-close {
+    border: 1px solid #e5e7eb;
+    background: #f8fafc;
+    color: #475569;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.argmap-detail-close:hover {
+    background: #eef2f7;
+}
+
+.detail-text {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #374151;
+}
+
+.detail-text p {
+    margin: 0 0 8px 0;
+}
+
+.detail-text p:last-child {
+    margin-bottom: 0;
+}
+
+.detail-author {
+    font-size: 12px;
+    color: #9ca3af;
+    font-style: italic;
+    padding: 8px 0;
+    border-top: 1px solid #f3f4f6;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.detail-source-text {
+    padding: 8px 12px;
+    background: #f9fafb;
+    border-left: 3px solid #d1d5db;
+    border-radius: 2px;
+    font-size: 12px;
+    color: #6b7280;
+    font-style: italic;
+}
+
+.detail-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.detail-links .btn {
+    flex: 1;
+    min-width: 140px;
+}
+
+/* Add argument buttons */
+.detail-add-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.detail-add-buttons .btn-success {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+}
+
+.detail-add-buttons .btn-success:hover {
+    background: #bbf7d0;
+}
+
+.detail-add-buttons .btn-danger {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+}
+
+.detail-add-buttons .btn-danger:hover {
+    background: #fecaca;
+}
+
+/* Edit/delete buttons */
+.detail-edit-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #f3f4f6;
+}
+
+.detail-edit-buttons .btn-primary {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+.detail-edit-buttons .btn-primary:hover {
+    background: #bfdbfe;
+}
+
+/* Button styles for panel */
+.btn {
+    height: auto;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.btn-sm {
+    padding: 6px 10px;
+    font-size: 11px;
+}
+
+.btn-link {
+    background: transparent;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+    text-decoration: none;
+}
+
+.btn-link:hover {
+    background: #eff6ff;
+    border-color: #93c5fd;
+}
+
+.argmap-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.argmap-toolbar-btn {
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid #c7d2fe;
+    background: white;
+    color: #1e3a8a;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 0 10px;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.argmap-toolbar-btn:hover {
+    background: #eef2ff;
+}
+
+/* Dark mode for Kialo argument map */
+[data-theme="dark"] .block-argument-map.kialo-style {
+    background: #1a1f2e;
+    border-color: #2d3748;
+}
+
+[data-theme="dark"] .argmap-main {
+    background: #111318;
+}
+
+[data-theme="dark"] .arg-node-svg:hover .arg-rect {
+    filter: drop-shadow(0 4px 8px rgba(255, 255, 255, 0.1));
+}
+
+[data-theme="dark"] .arg-node-svg.selected .arg-rect {
+    filter: drop-shadow(0 6px 12px rgba(255, 255, 255, 0.15));
+}
+
+[data-theme="dark"] .arg-sibling-group {
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+[data-theme="dark"] .argmap-detail-panel {
+    background: #1a1f2e;
+    border-left-color: #2d3748;
+    color: #d1d5db;
+}
+
+[data-theme="dark"] .argmap-panel-peek {
+    background: rgba(17, 19, 24, 0.92);
+    color: #c7d2fe;
+    border-color: #344055;
+}
+
+[data-theme="dark"] .argmap-detail-close {
+    background: #111827;
+    border-color: #374151;
+    color: #cbd5e1;
+}
+
+[data-theme="dark"] .argmap-detail-close:hover,
+[data-theme="dark"] .argmap-toolbar-btn:hover {
+    background: #1f2937;
+}
+
+[data-theme="dark"] .argmap-toolbar-btn {
+    background: #111827;
+    border-color: #344055;
+    color: #c7d2fe;
+}
+
+[data-theme="dark"] .detail-role {
+    color: #9ca3af;
+}
+
+[data-theme="dark"] .detail-text {
+    color: #d1d5db;
+}
+
+[data-theme="dark"] .detail-author {
+    color: #6b7280;
+}
+
+[data-theme="dark"] .detail-actions {
+    border-top-color: #2d3748;
 }
 
 [data-theme="dark"] .block-argument-map {

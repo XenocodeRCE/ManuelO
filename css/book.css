@@ -99,7 +99,19 @@
     cursor: pointer;
     outline: none;
 }
+#book-layout-select {
+    padding: 5px 8px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    color: #fff;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    outline: none;
+}
 #book-theme-select option { background: #222; color: #fff; }
+#book-layout-select option { background: #222; color: #fff; }
 .book-hud-btn {
     width: 30px;
     height: 30px;
@@ -270,17 +282,31 @@
 
 /* ── Chapter title at top of page ── */
 .book-page-chapter-title {
-    font-size: 18px;
-    font-weight: 800;
-    margin-bottom: 4px;
+    font-size: 25px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    padding-left: 14px;
+    border-left: 4px solid #d81b60;
+    color: #b0004f;
     flex-shrink: 0;
     line-height: 1.25;
 }
+.book-page-chapter-title.is-continuation {
+    font-size: 20px;
+    opacity: 0.82;
+}
 .book-page-chapter-subtitle {
-    font-size: 12px;
-    opacity: 0.55;
+    display: inline-flex;
+    align-self: flex-start;
+    font-size: 10px;
+    opacity: 0.92;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: #d81b60;
+    color: #fff;
+    padding: 3px 8px;
+    border-radius: 999px;
     margin-bottom: 14px;
-    font-style: italic;
     flex-shrink: 0;
 }
 .book-page-continuation {
@@ -302,6 +328,42 @@
 }
 .book-block {
     break-inside: avoid;
+}
+.book-margin-note-block {
+    display: grid;
+    grid-template-columns: 128px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+}
+.book-margin-note {
+    padding: 8px 9px;
+    border-radius: 7px;
+    border-left: 3px solid #d81b60;
+    background: rgba(216, 27, 96, 0.06);
+    font-size: 10px;
+    line-height: 1.35;
+}
+.book-margin-note-block.is-rappel .book-margin-note {
+    border-left-color: #0ea5a4;
+    background: rgba(14, 165, 164, 0.08);
+}
+.book-margin-note-block.is-warning .book-margin-note {
+    border-left-color: #ea580c;
+    background: rgba(234, 88, 12, 0.1);
+}
+.book-margin-note-label {
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    font-weight: 800;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+.book-margin-note-body {
+    font-size: 10px;
+    opacity: 0.82;
+}
+.book-margin-note-content {
+    min-width: 0;
 }
 .book-block-slice {
     overflow: hidden;
@@ -343,6 +405,65 @@
 }
 .book-pagenum { display: block; }
 .book-pagenum-right { margin-left: auto; }
+
+/* Source text / citation in book mode with line markers */
+.book-source-modern {
+    border-left: 3px solid #d81b60;
+    background: rgba(216, 27, 96, 0.04);
+    border-radius: 0 8px 8px 0;
+    padding: 10px 12px 8px 18px;
+}
+.book-source-modern.is-citation {
+    border-left-color: #1976d2;
+    background: rgba(25, 118, 210, 0.045);
+}
+.book-source-lines {
+    counter-reset: bookline;
+    position: relative;
+}
+.book-source-line {
+    display: block;
+    position: relative;
+    line-height: 1.5;
+    font-size: 13px;
+    padding-left: 16px;
+    margin-bottom: 2px;
+}
+.book-source-line.has-marker::before {
+    content: attr(data-line);
+    position: absolute;
+    left: -12px;
+    top: 0;
+    font-size: 9px;
+    color: rgba(0,0,0,0.38);
+    font-weight: 700;
+}
+.book-source-break {
+    display: block;
+    height: 9px;
+}
+.book-source-ref {
+    margin-top: 7px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(0,0,0,0.12);
+    font-size: 11px;
+    font-style: italic;
+    color: rgba(0,0,0,0.65);
+}
+.book-source-part {
+    display: inline-flex;
+    align-self: flex-start;
+    margin-bottom: 7px;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: rgba(0,0,0,0.58);
+    background: rgba(255,255,255,0.65);
+    border: 1px solid rgba(0,0,0,0.12);
+    border-radius: 999px;
+    padding: 2px 8px;
+}
 
 /* ── Hide all editor-only controls inside book view ── */
 #book-overlay .block-controls,
@@ -429,6 +550,46 @@
 /* ── Dark mode overrides for block backgrounds inside book ── */
 #book-overlay.book-theme-dark .block-section-title    { background: rgba(255,255,255,0.05) !important; border-color: rgba(255,255,255,0.1) !important; }
 #book-overlay.book-theme-dark .block-text-intro       { color: inherit; }
+#book-overlay.book-theme-dark .book-page-chapter-title {
+    color: #ff5f9e;
+    border-left-color: #ff5f9e;
+}
+#book-overlay.book-theme-dark .book-page-chapter-subtitle {
+    background: #ff5f9e;
+    color: #161821;
+}
+#book-overlay.book-theme-dark .book-source-modern {
+    background: rgba(255, 95, 158, 0.1);
+    border-left-color: #ff5f9e;
+}
+#book-overlay.book-theme-dark .book-source-modern.is-citation {
+    background: rgba(96, 165, 250, 0.12);
+    border-left-color: #60a5fa;
+}
+#book-overlay.book-theme-dark .book-source-line.has-marker::before {
+    color: rgba(255,255,255,0.45);
+}
+#book-overlay.book-theme-dark .book-source-ref {
+    border-top-color: rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.72);
+}
+#book-overlay.book-theme-dark .book-source-part {
+    color: rgba(255,255,255,0.75);
+    border-color: rgba(255,255,255,0.25);
+    background: rgba(0,0,0,0.2);
+}
+#book-overlay.book-theme-dark .book-margin-note {
+    background: rgba(255, 95, 158, 0.15);
+    border-left-color: #ff5f9e;
+}
+#book-overlay.book-theme-dark .book-margin-note-block.is-rappel .book-margin-note {
+    background: rgba(45, 212, 191, 0.15);
+    border-left-color: #2dd4bf;
+}
+#book-overlay.book-theme-dark .book-margin-note-block.is-warning .book-margin-note {
+    background: rgba(251, 146, 60, 0.16);
+    border-left-color: #fb923c;
+}
 #book-overlay.book-theme-dark .block-definition,
 #book-overlay.book-theme-dark .block-summary,
 #book-overlay.book-theme-dark .block-recall,
@@ -453,6 +614,17 @@
 
 /* Sepia — warm tint on blocks */
 #book-overlay.book-theme-sepia .block-text-intro { color: #3d2c1a; }
+#book-overlay.book-theme-sepia .book-page-chapter-title {
+    color: #a9004a;
+    border-left-color: #a9004a;
+}
+#book-overlay.book-theme-sepia .book-page-chapter-subtitle {
+    background: #a9004a;
+}
+#book-overlay.book-theme-sepia .book-source-modern {
+    background: rgba(169, 0, 74, 0.06);
+    border-left-color: #a9004a;
+}
 
 /* ── Responsive: mobile always single page ── */
 @media (max-width: 1023px) {
@@ -460,4 +632,8 @@
     #book-overlay .book-spine  { display: none !important; }
     #book-overlay #book-left   { width: 100% !important; }
     .book-nav-btn { width: 36px; height: 36px; font-size: 20px; }
+    .book-margin-note-block {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
 }

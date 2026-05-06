@@ -280,83 +280,77 @@ export function computeArgumentStanceMap(root) {
 }
 
 export function computeArgumentTreeLayout(root, viewMode = 'TREE') {
+    if (typeof d3 === 'undefined' || !d3.tree || !d3.hierarchy) {
+        console.warn('d3 not available, returning fallback layout');
+        return { nodes: [], edges: [], width: 800, height: 600, mode: 'TREE' };
+    }
+
     const mode = 'TREE';
-    const widths = new Map();
     const nodes = [];
     const edges = [];
-    let maxDepth = 0;
-
     const visibleChildren = node => (node.isCollapsed ? [] : (Array.isArray(node.children) ? node.children : []));
 
-    function measure(node, depth = 0) {
-        maxDepth = Math.max(maxDepth, depth);
-        const children = visibleChildren(node);
-        if (!children.length) {
-            widths.set(node.id, NODE_WIDTH);
-            return NODE_WIDTH;
+    // Flatten the tree for d3 processing
+    const flattenedRoot = {
+        id: root.id,
+        node: root,
+        children: visibleChildren(root).map(child => flattenNode(child))
+    };
+
+    function flattenNode(node) {
+        return {
+            id: node.id,
+            node: node,
+            children: visibleChildren(node).map(child => flattenNode(child))
+        };
+    }
+
+    // Create a d3 hierarchy
+    const hierarchy = d3.hierarchy(flattenedRoot);
+    const treeLayout = d3.tree().nodeSize([250, 150]);
+    const treeNodes = treeLayout(hierarchy);
+
+    // Traverse and collect positioned nodes
+    let minX = Infinity, maxX = -Infinity, maxY = 0;
+    treeNodes.each((d, i) => {
+        const x = d.x + 400; // Shift for padding
+        const y = d.y + 80;
+        const depth = d.depth;
+        const parentId = d.parent ? d.parent.data.id : null;
+
+        nodes.push({
+            id: d.data.id,
+            node: d.data.node,
+            parentId: parentId,
+            x: x,
+            y: y,
+            depth: depth,
+            d3Node: d
+        });
+
+        if (d.parent) {
+            edges.push({
+                from: d.parent.data.id,
+                to: d.data.id,
+                parent: d.parent,
+                child: d
+            });
         }
 
-        const supportChildren = children.filter(child => normalizeArgumentRole(child.role) !== 'OBJECTION');
-        const objectionChildren = children.filter(child => normalizeArgumentRole(child.role) === 'OBJECTION');
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+    });
 
-        const supportWidth = supportChildren.length
-            ? supportChildren.reduce((sum, child) => sum + measure(child, depth + 1), 0) + H_GAP * (supportChildren.length - 1)
-            : 0;
-        const objectionWidth = objectionChildren.length
-            ? objectionChildren.reduce((sum, child) => sum + measure(child, depth + 1), 0) + H_GAP * (objectionChildren.length - 1)
-            : 0;
+    // Add padding and ensure minimum dimensions
+    const padding = 60;
+    const width = Math.max(800, maxX - minX + padding * 2);
+    const height = Math.max(600, maxY + padding + 100);
 
-        const childrenWidth = supportWidth + objectionWidth + (supportWidth && objectionWidth ? H_GAP * 2 : 0);
-        const width = Math.max(NODE_WIDTH, childrenWidth || NODE_WIDTH);
-        widths.set(node.id, width);
-        return width;
-    }
+    // Normalize coordinates to start from padding
+    nodes.forEach(n => {
+        n.x = n.x - minX + padding;
+    });
 
-    const rootWidth = measure(root);
-
-    function place(node, depth, left, parentId = null) {
-        const nodeWidth = widths.get(node.id) || NODE_WIDTH;
-        const children = visibleChildren(node);
-        const supportChildren = children.filter(child => normalizeArgumentRole(child.role) !== 'OBJECTION');
-        const objectionChildren = children.filter(child => normalizeArgumentRole(child.role) === 'OBJECTION');
-
-        const supportWidth = supportChildren.length
-            ? supportChildren.reduce((sum, child) => sum + (widths.get(child.id) || NODE_WIDTH), 0) + H_GAP * (supportChildren.length - 1)
-            : 0;
-        const objectionWidth = objectionChildren.length
-            ? objectionChildren.reduce((sum, child) => sum + (widths.get(child.id) || NODE_WIDTH), 0) + H_GAP * (objectionChildren.length - 1)
-            : 0;
-
-        const center = left + nodeWidth / 2;
-        const x = center + SIDE_PAD;
-        const y = TOP_PAD + depth * V_GAP;
-
-        nodes.push({ id: node.id, node, parentId, x, y, depth });
-        if (parentId) edges.push({ from: parentId, to: node.id });
-
-        const splitGap = supportWidth && objectionWidth ? H_GAP * 2 : H_GAP;
-        const bandWidth = supportWidth + objectionWidth + (supportWidth && objectionWidth ? splitGap : 0);
-        const bandLeft = left + Math.max(0, (nodeWidth - bandWidth) / 2);
-
-        let leftCursor = bandLeft;
-        supportChildren.forEach(child => {
-            const childWidth = widths.get(child.id) || NODE_WIDTH;
-            place(child, depth + 1, leftCursor, node.id);
-            leftCursor += childWidth + H_GAP;
-        });
-
-        let rightCursor = bandLeft + supportWidth + (supportWidth && objectionWidth ? splitGap : 0);
-        objectionChildren.forEach(child => {
-            const childWidth = widths.get(child.id) || NODE_WIDTH;
-            place(child, depth + 1, rightCursor, node.id);
-            rightCursor += childWidth + H_GAP;
-        });
-    }
-
-    place(root, 0, 0, null);
-
-    let width = Math.max(380, rootWidth + SIDE_PAD * 2);
-    let height = Math.max(260, (maxDepth + 1) * V_GAP + TOP_PAD + BOTTOM_PAD);
-
-    return { nodes, edges, width, height, mode };
+    return { nodes, edges, width, height, mode, hierarchy: treeNodes };
 }
