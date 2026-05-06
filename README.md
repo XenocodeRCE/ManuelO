@@ -2,12 +2,23 @@
 
 Éditeur de manuels de cours pédagogiques — gratuit, sans dépendance, sans build tool.
 
+Version live de test : [https://philo-lycee.fr/ManuelO/](https://philo-lycee.fr/ManuelO/) (ne rient mettr d'important, c'est juste pour voir)
+
 ## Stack
 
 - HTML5 / CSS3 / JavaScript ES modules (vanilla)
 - PHP backend léger pour la persistance (fichiers JSON)
 - SortableJS (CDN) — drag & drop des blocs et exercices de classement
 - Mermaid.js v11 (CDN) — rendu de diagrammes
+
+---
+
+## Images
+![](https://i.imgur.com/VqoRm3u.png)
+![](https://i.imgur.com/lZBKkDI.png)
+![](https://i.imgur.com/MkaBnit.png)
+
+---
 
 ## Structure
 
