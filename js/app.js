@@ -1,13 +1,31 @@
 // Point d'entrée de l'application ManuelO
 // Orchestre les modules, expose les fonctions globales, initialise l'app
 
-import { state } from './state.js';
+import {
+    state,
+    createDefaultRevisionState,
+    normalizeRevisionState,
+    REVISION_ALLOWED_BLOCK_TYPES
+} from './state.js';
 import { renderBlocks, renderSidebar, getPages } from './render.js';
 import { moveBlock, toggleVisibility, deleteBlock, selectQcm } from './actions.js';
 import { openModal, closeModal, submitBlock } from './modal.js';
 import { save, saveNow } from './save.js';
 import { toggleVocabTooltip } from './markdown.js';
 import { enterPresentation, exitPresentation, presGo } from './presentation.js';
+import { openPdfExport, closePdfExport, closePdfExportOnOverlay, launchPrint } from './pdf.js';
+import { enterBookView, exitBookView, bookGo, bookGoTo, bookSetTheme } from './book.js';
+import {
+    addArgumentChild,
+    ensureArgumentMap,
+    findArgumentNode,
+    moveArgumentNode,
+    sanitizeArgumentExternalUrl,
+    removeArgumentNode,
+    toggleArgumentNodeRole,
+    toggleArgumentNode,
+    updateArgumentNode
+} from './argument-map.js';
 
 // ===== CATALOGUE DES BLOCS (pour la modale d'insertion) =====
 const BLOCKS_CATALOG = [
@@ -52,6 +70,7 @@ const BLOCKS_CATALOG = [
             { type: 'exercise-table',     icon: '📊', label: 'Tableau à compléter',  desc: 'Grille avec cases à remplir',      color: '#eff6ff', tc: '#1d4ed8' },
             { type: 'exercise-document',  icon: '📂', label: 'Étude de document',    desc: 'Document + questions guidées',     color: '#fff7ed', tc: '#c2410c' },
             { type: 'exercise-sort',      icon: '🔢', label: 'Classement',           desc: "Remettre dans l'ordre",            color: '#fdf4ff', tc: '#7c3aed' },
+            { type: 'argument-map',       icon: '🗺️', label: 'Carte d\'argument',     desc: 'Arbre visuel de raisonnement',     color: '#eef2ff', tc: '#4f46e5' },
         ]
     },
     {
@@ -71,6 +90,22 @@ const BLOCKS_CATALOG = [
     }
 ];
 
+const BLOCK_TYPE_LABELS = Object.fromEntries(
+    BLOCKS_CATALOG
+        .flatMap(cat => cat.blocks || [])
+        .filter(block => block.type && block.type !== '__page-break__')
+        .map(block => [block.type, block.label])
+);
+
+const REVISION_ANSWERS = new Set(['AGAIN', 'HARD', 'GOOD', 'EASY']);
+const REVISION_ANSWER_LABELS = {
+    AGAIN: 'Encore',
+    HARD: 'Difficile',
+    GOOD: 'Bien',
+    EASY: 'Facile'
+};
+let _runtimeRevisionSession = null;
+
 // Active category id for insert modal
 let _insertActiveCat = BLOCKS_CATALOG[0].id;
 
@@ -82,21 +117,116 @@ function generateId() {
     });
 }
 
+function escHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function ensureRevisionState() {
+    const current = state.revision || createDefaultRevisionState();
+    const currentHasSession = !!(current?.session && typeof current.session === 'object');
+    const runtimeSession = current?.session && typeof current.session === 'object'
+        ? current.session
+        : (_runtimeRevisionSession && typeof _runtimeRevisionSession === 'object' ? _runtimeRevisionSession : null);
+
+    state.revision = normalizeRevisionState(current, { preserveRuntimeSession: true });
+    const normalizedHasSession = !!(state.revision.session && typeof state.revision.session === 'object');
+    let restored = false;
+    if (!state.revision.session && runtimeSession) {
+        // Defensive fallback: never drop an active in-memory session during frequent re-normalization.
+        state.revision.session = runtimeSession;
+        restored = true;
+    }
+    if (state.revision.session && typeof state.revision.session === 'object') {
+        _runtimeRevisionSession = state.revision.session;
+    }
+    if (typeof revisionDebug === 'function') {
+        revisionDebug('ensureRevisionState', {
+            currentHasSession,
+            guardHasSession: !!runtimeSession,
+            normalizedHasSession,
+            restored,
+            finalHasSession: !!state.revision.session
+        });
+    }
+    return state.revision;
+}
+
+function getRevisionConfig() {
+    return ensureRevisionState().config;
+}
+
+function getRevisionUserId() {
+    const revision = ensureRevisionState();
+    return revision.currentUserId || 'eleve-local';
+}
+
+function getManualBlockTypes() {
+    return [...new Set(
+        state.blocks
+            .map(block => block?.type)
+            .filter(type => type && type !== 'page-break')
+    )];
+}
+
+function getBlockTypeLabel(type) {
+    return BLOCK_TYPE_LABELS[type] || type;
+}
+
+function getBlockById(blockId) {
+    return state.blocks.find(block => String(block.id) === String(blockId)) || null;
+}
+
+function getBlockTypeById(blockId) {
+    return getBlockById(blockId)?.type || '';
+}
+
+function getBlockPreviewLabel(block) {
+    if (!block) return '';
+    if (block.type === 'section-title') return block.content || '';
+    if (block.type === 'definition') return block.term || '';
+    if (block.type === 'distinction') return `${block.termA || ''} / ${block.termB || ''}`.trim();
+    if (block.type === 'questions') {
+        if (Array.isArray(block.questions)) return block.questions[0] || '';
+        return String(block.questions || '').split('\n')[0] || '';
+    }
+    return block.title || block.question || block.caption || block.prompt || block.content || '';
+}
+
+function shortText(value, maxLen = 120) {
+    const cleaned = String(value || '').replace(/\s+/g, ' ').trim();
+    if (cleaned.length <= maxLen) return cleaned;
+    return `${cleaned.slice(0, maxLen).trimEnd()}...`;
+}
+
 // ===== REFRESH (renderBlocks + sommaire synchronisé) =====
 function refresh() {
+    ensureRevisionState();
     renderBlocks();
     renderSidebarSommaire();
+    renderRevisionPanel();
 }
 
 // ===== MODE =====
 function setMode(m) {
-    state.mode = m;
-    document.getElementById('btn-prof').classList.toggle('active', m === 'prof');
-    document.getElementById('btn-eleve').classList.toggle('active', m === 'eleve');
-    document.getElementById('edit-info').style.display = m === 'prof' ? 'block' : 'none';
-    document.getElementById('edit-banner').style.display = m === 'prof' ? 'flex' : 'none';
+    const safeMode = m === 'eleve' || m === 'revision' ? m : 'prof';
+    state.mode = safeMode;
+    document.getElementById('btn-prof').classList.toggle('active', safeMode === 'prof');
+    document.getElementById('btn-eleve').classList.toggle('active', safeMode === 'eleve');
+    const revisionBtn = document.getElementById('btn-revision');
+    if (revisionBtn) revisionBtn.classList.toggle('active', safeMode === 'revision');
+    const isProf = safeMode === 'prof';
+    document.getElementById('edit-info').style.display = isProf ? 'block' : 'none';
+    document.getElementById('edit-banner').style.display = isProf ? 'flex' : 'none';
     const fab = document.getElementById('fab-zone');
-    if (fab) fab.style.display = m === 'prof' ? 'flex' : 'none';
+    if (fab) fab.style.display = isProf ? 'flex' : 'none';
+    const revisionConfigBtn = document.getElementById('btn-revision-config');
+    if (revisionConfigBtn) revisionConfigBtn.style.display = isProf ? 'inline-flex' : 'none';
+    document.body.classList.toggle('mode-revision', safeMode === 'revision');
     refresh();
     initSortable();
 }
@@ -111,6 +241,16 @@ function editBlock(index) {
     if (Array.isArray(block.questions)) values.questions = block.questions.join('\n');
     if (Array.isArray(block.options))   values.options   = block.options.join('\n');
     if (Array.isArray(block.blanks))    values.blanks    = block.blanks.map(b => [b.correct, ...b.distractors].join('|')).join('\n');
+    if (block.type === 'argument-map') {
+        const map = ensureArgumentMap(block);
+        const root = map.thesis || {};
+        const support = (root.children || []).find(n => n.role === 'SUPPORT');
+        const objection = (root.children || []).find(n => n.role === 'OBJECTION');
+        values.title = block.title || '';
+        values.thesis = root.content || '';
+        values.hints = [support?.content || '', objection?.content || ''].filter(Boolean).join('\n');
+        values.isExercise = map.isExercise ? 'oui' : 'non';
+    }
 
     openModal(block.type, values);
 }
@@ -357,7 +497,7 @@ function initSortable() {
 
     sortableInstance = Sortable.create(document.getElementById('content-inner'), {
         animation: 150,
-        handle: '.block-wrapper',
+        handle: '.block-drag-handle',
         draggable: '.block-wrapper',
         filter: '.block-insert-zone, .page-current-header',
         ghostClass: 'sortable-ghost',
@@ -384,6 +524,580 @@ function initSortable() {
     });
 }
 
+// ===== MODE REVISION =====
+let _revisionConfigModal = null;
+const REVISION_ALLOWED_TYPE_SET = new Set(REVISION_ALLOWED_BLOCK_TYPES);
+
+const REVISION_DEBUG = true;
+function revisionDebug(...args) {
+    if (!REVISION_DEBUG) return;
+    console.log('[revision-debug]', ...args);
+}
+
+function _bindRevisionPanelEvents(panel) {
+    if (!panel) return;
+    revisionDebug('bind panel events', { mode: state.mode, panelId: panel.id });
+
+    panel.onclick = evt => {
+        const target = evt.target;
+        if (!(target instanceof Element)) return;
+        const actionBtn = target.closest('[data-revision-action]');
+        if (!actionBtn || !panel.contains(actionBtn)) return;
+
+        const action = String(actionBtn.dataset.revisionAction || '');
+        revisionDebug('panel click action', {
+            action,
+            tag: actionBtn.tagName,
+            text: String(actionBtn.textContent || '').trim()
+        });
+        if (action === 'start') {
+            startRevisionSession();
+            return;
+        }
+        if (action === 'stop') {
+            stopRevisionSession();
+            return;
+        }
+        if (action === 'flip') {
+            flipRevisionCard();
+            return;
+        }
+        if (action === 'answer') {
+            answerRevisionCard(String(actionBtn.dataset.answer || '').toUpperCase());
+        }
+    };
+}
+
+function _ensureProgressBucket(userId) {
+    const revision = ensureRevisionState();
+    if (!revision.progressByUser[userId]) revision.progressByUser[userId] = {};
+    return revision.progressByUser[userId];
+}
+
+function _defaultCardProgress() {
+    return {
+        repetitions: 0,
+        easeFactor: 2.5,
+        interval: 0,
+        lapses: 0,
+        nextReviewAt: Date.now(),
+        lastReviewedAt: null,
+        history: []
+    };
+}
+
+function _shuffle(array) {
+    const result = [...array];
+    for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+}
+
+function _stripMarkdownLite(raw) {
+    return String(raw || '')
+        .replace(/\[(.*?)\]\((.*?)\)/g, '$1')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/__(.*?)__/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/==([^=]+)==/g, '$1')
+        .replace(/\{([^|}]+)\|([^}]+)\}/g, '$1')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function _getRevisionCardAnswer(block) {
+    if (!block) return '';
+
+    if (block.type === 'summary') {
+        const items = String(block.items || '')
+            .split('\n')
+            .map(item => _stripMarkdownLite(item))
+            .filter(Boolean);
+        return items.join(' ; ');
+    }
+
+    if (block.type === 'warning' || block.type === 'recall') {
+        return _stripMarkdownLite(block.content || '');
+    }
+
+    return '';
+}
+
+function _buildRevisionCardFromBlock(block) {
+    const front = String(block?.flashcard || '').trim();
+    const back = _getRevisionCardAnswer(block);
+    if (!front || !back) return null;
+
+    return {
+        id: `block-${String(block.id)}`,
+        sourceBlocId: String(block.id || ''),
+        sourceType: block.type,
+        front,
+        back,
+        category: getBlockTypeLabel(block.type)
+    };
+}
+
+function _getRevisionCardsByConfig() {
+    const cards = state.blocks
+        .filter(block => {
+            if (!block || block.type === 'page-break') return false;
+            if (!REVISION_ALLOWED_TYPE_SET.has(block.type)) return false;
+            if (block.visible === false) return false;
+            return true;
+        })
+        .map(_buildRevisionCardFromBlock)
+        .filter(Boolean);
+
+    revisionDebug('cards by config', {
+        totalBlocks: Array.isArray(state.blocks) ? state.blocks.length : 0,
+        generatedCards: cards.length
+    });
+
+    return cards;
+}
+
+function _getDueRevisionCards() {
+    const revision = ensureRevisionState();
+    const config = revision.config;
+    const userId = getRevisionUserId();
+    const progress = _ensureProgressBucket(userId);
+    const now = Date.now();
+
+    const cards = _getRevisionCardsByConfig().filter(card => {
+        if (!config.useSpacedRepetition) return true;
+        const entry = progress[card.id];
+        if (!entry) return true;
+        return Number(entry.nextReviewAt || 0) <= now;
+    });
+
+    if (config.useSpacedRepetition) {
+        cards.sort((a, b) => {
+            const aNext = Number(progress[a.id]?.nextReviewAt || 0);
+            const bNext = Number(progress[b.id]?.nextReviewAt || 0);
+            return aNext - bNext;
+        });
+    }
+
+    return cards;
+}
+
+function _processRevisionAnswer(previousProgress, answer, responseTime) {
+    const qualityMap = { AGAIN: 0, HARD: 1, GOOD: 2, EASY: 3 };
+    const quality = qualityMap[answer] ?? 2;
+    const current = {
+        ..._defaultCardProgress(),
+        ...(previousProgress || {})
+    };
+
+    let repetitions = Math.max(0, Number(current.repetitions) || 0);
+    let interval = Math.max(0, Number(current.interval) || 0);
+    let easeFactor = Math.max(1.3, Number(current.easeFactor) || 2.5);
+    let lapses = Math.max(0, Number(current.lapses) || 0);
+
+    if (answer === 'AGAIN') {
+        repetitions = 0;
+        interval = 1;
+        lapses += 1;
+        easeFactor = Math.max(1.3, easeFactor - 0.2);
+    } else {
+        if (repetitions === 0) {
+            interval = 1;
+        } else if (repetitions === 1) {
+            interval = 3;
+        } else {
+            const multiplier = answer === 'HARD'
+                ? Math.max(1.15, easeFactor - 0.2)
+                : (answer === 'EASY' ? easeFactor + 0.22 : easeFactor);
+            interval = Math.max(1, Math.round(interval * multiplier));
+        }
+        repetitions += 1;
+
+        const diff = 3 - quality;
+        easeFactor = Math.max(1.3, easeFactor + (0.1 - diff * (0.08 + diff * 0.02)));
+        if (answer === 'HARD') easeFactor = Math.max(1.3, easeFactor - 0.05);
+        if (answer === 'EASY') easeFactor += 0.1;
+    }
+
+    const now = Date.now();
+    const history = Array.isArray(current.history) ? [...current.history] : [];
+    history.push({
+        timestamp: now,
+        answer,
+        responseTime: Math.max(0, Number(responseTime) || 0)
+    });
+
+    return {
+        repetitions,
+        easeFactor,
+        interval,
+        lapses,
+        nextReviewAt: now + interval * 24 * 60 * 60 * 1000,
+        lastReviewedAt: now,
+        history
+    };
+}
+
+function _finishRevisionSession() {
+    const revision = ensureRevisionState();
+    if (!revision.session) return;
+    revision.session.isFinished = true;
+    revision.session.finishedAt = Date.now();
+}
+
+function startRevisionSession() {
+    try {
+        revisionDebug('startRevisionSession called', { mode: state.mode });
+        const config = getRevisionConfig();
+        let cards = _getDueRevisionCards();
+        revisionDebug('due cards computed', { dueCount: cards.length });
+
+        if (!cards.length) {
+            cards = _getRevisionCardsByConfig();
+            revisionDebug('fallback cards computed', { fallbackCount: cards.length });
+        }
+        if (!cards.length) {
+            revisionDebug('no cards available, abort start');
+            showToast('Aucune flashcard configuree dans les blocs de revision.', 'warn');
+            return;
+        }
+
+        if (config.shuffleCards) {
+            revisionDebug('shuffle enabled, shuffling cards', { count: cards.length });
+            cards = _shuffle(cards);
+        }
+
+        const revision = ensureRevisionState();
+        revision.session = {
+            startedAt: Date.now(),
+            finishedAt: null,
+            isFinished: false,
+            flipped: false,
+            queue: cards,
+            currentIndex: 0,
+            answeredCount: 0,
+            correctCount: 0,
+            incorrectCount: 0,
+            cardShownAt: Date.now()
+        };
+        _runtimeRevisionSession = revision.session;
+
+        revisionDebug('session created', {
+            queueLength: revision.session.queue.length,
+            currentIndex: revision.session.currentIndex
+        });
+
+        renderRevisionPanel();
+    } catch (err) {
+        console.error('[revision/start]', err);
+        revisionDebug('startRevisionSession error', { message: err?.message || String(err) });
+        showToast(`Erreur au demarrage: ${err?.message || 'inconnue'}`, 'error');
+    }
+}
+
+function stopRevisionSession() {
+    const revision = ensureRevisionState();
+    revision.session = null;
+    _runtimeRevisionSession = null;
+    renderRevisionPanel();
+}
+
+function flipRevisionCard() {
+    const session = ensureRevisionState().session;
+    if (!session || session.isFinished) return;
+    session.flipped = !session.flipped;
+    renderRevisionPanel();
+}
+
+function answerRevisionCard(answer) {
+    if (!REVISION_ANSWERS.has(answer)) return;
+
+    const revision = ensureRevisionState();
+    const session = revision.session;
+    if (!session || session.isFinished) return;
+
+    const currentCard = session.queue[session.currentIndex];
+    if (!currentCard) {
+        _finishRevisionSession();
+        renderRevisionPanel();
+        return;
+    }
+
+    const userId = getRevisionUserId();
+    const bucket = _ensureProgressBucket(userId);
+    const responseTime = Date.now() - Number(session.cardShownAt || Date.now());
+    const prevProgress = bucket[currentCard.id] || _defaultCardProgress();
+    bucket[currentCard.id] = _processRevisionAnswer(prevProgress, answer, responseTime);
+
+    session.answeredCount += 1;
+    if (answer === 'GOOD' || answer === 'EASY') session.correctCount += 1;
+    else session.incorrectCount += 1;
+
+    if (answer === 'AGAIN' && session.queue.length > 1) {
+        const insertionOffset = 2 + Math.floor(Math.random() * 4);
+        const insertionIndex = Math.min(session.currentIndex + insertionOffset, session.queue.length);
+        session.queue.splice(insertionIndex, 0, currentCard);
+    }
+
+    session.currentIndex += 1;
+    session.flipped = false;
+    session.cardShownAt = Date.now();
+
+    const maxMinutes = Number(revision.config.sessionDuration) || 0;
+    if (maxMinutes > 0) {
+        const elapsedMs = Date.now() - Number(session.startedAt || Date.now());
+        if (elapsedMs >= maxMinutes * 60 * 1000) {
+            _finishRevisionSession();
+        }
+    }
+
+    if (session.currentIndex >= session.queue.length) {
+        _finishRevisionSession();
+    }
+
+    save();
+    renderRevisionPanel();
+}
+
+function _formatSessionTimer(sessionStartedAt, sessionDurationMin) {
+    const maxMs = Math.max(0, Number(sessionDurationMin) || 0) * 60 * 1000;
+    if (!maxMs) return 'Session libre';
+    const elapsed = Date.now() - Number(sessionStartedAt || Date.now());
+    const remaining = Math.max(0, maxMs - elapsed);
+    const mm = Math.floor(remaining / 60000);
+    const ss = Math.floor((remaining % 60000) / 1000);
+    return `Temps restant: ${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+}
+
+function renderRevisionPanel() {
+    const panel = document.getElementById('revision-panel');
+    if (!panel) {
+        revisionDebug('renderRevisionPanel: panel not found');
+        return;
+    }
+    _bindRevisionPanelEvents(panel);
+
+    if (state.mode !== 'revision') {
+        revisionDebug('renderRevisionPanel: hidden because mode is not revision', { mode: state.mode });
+        panel.style.display = 'none';
+        panel.innerHTML = '';
+        return;
+    }
+
+    panel.style.display = 'block';
+    const revision = ensureRevisionState();
+    const dueCards = _getDueRevisionCards();
+    const availableCards = _getRevisionCardsByConfig();
+    const session = revision.session;
+    revisionDebug('renderRevisionPanel snapshot', {
+        mode: state.mode,
+        dueCount: dueCards.length,
+        availableCount: availableCards.length,
+        hasSession: !!session,
+        sessionFinished: !!session?.isFinished
+    });
+
+    if (!availableCards.length) {
+        panel.innerHTML = `
+            <div class="revision-panel-header">
+                <div>
+                    <div class="revision-panel-title">Mode revision actif</div>
+                    <div class="revision-panel-subtitle">Aucune flashcard configuree dans les blocs autorises.</div>
+                </div>
+            </div>
+            <div class="revision-empty">Le professeur doit renseigner le champ Flashcard (question) dans les blocs A retenir, Attention / Piege et Rappel / Prerequis.</div>`;
+        return;
+    }
+
+    if (!session || session.isFinished) {
+        const scoreLine = session?.isFinished
+            ? `<span class="revision-stat">Derniere session: ${session.correctCount} bonnes / ${session.incorrectCount} difficiles</span>`
+            : '';
+        panel.innerHTML = `
+            <div class="revision-panel-header">
+                <div>
+                    <div class="revision-panel-title">Mode revision actif</div>
+                    <div class="revision-panel-subtitle">Cartes generees depuis les blocs A retenir, Attention / Piege et Rappel / Prerequis.</div>
+                </div>
+                <div class="revision-panel-actions">
+                    <button class="revision-panel-btn" type="button" data-revision-action="start">Demarrer la session</button>
+                </div>
+            </div>
+            <div class="revision-session-stats">
+                <span class="revision-stat">Cartes dues: ${dueCards.length}</span>
+                <span class="revision-stat">Cartes disponibles: ${availableCards.length}</span>
+                ${scoreLine}
+            </div>
+            <div class="revision-empty">Session en popup: cliquez sur Demarrer, puis cliquez sur la carte pour voir la reponse.</div>`;
+        return;
+    }
+
+    const currentCard = session.queue[session.currentIndex];
+    if (!currentCard) {
+        _finishRevisionSession();
+        renderRevisionPanel();
+        return;
+    }
+
+    const faceLabel = session.flipped ? 'Reponse' : 'Question';
+    const text = session.flipped ? currentCard.back : currentCard.front;
+    const sourceLabel = currentCard.category || getBlockTypeLabel(currentCard.sourceType || '');
+    const timerText = _formatSessionTimer(session.startedAt, revision.config.sessionDuration);
+
+    panel.innerHTML = `
+        <div class="revision-panel-header">
+            <div>
+                <div class="revision-panel-title">Session en cours</div>
+                <div class="revision-panel-subtitle">${timerText}</div>
+            </div>
+            <div class="revision-panel-actions">
+                <button class="revision-panel-btn" type="button" data-revision-action="stop">Arreter</button>
+            </div>
+        </div>
+        <div class="revision-session-stats">
+            <span class="revision-stat">Carte ${session.currentIndex + 1} / ${session.queue.length}</span>
+            <span class="revision-stat">Bonnes: ${session.correctCount}</span>
+            <span class="revision-stat">A retravailler: ${session.incorrectCount}</span>
+        </div>
+        <div class="revision-modal-overlay active revision-study-overlay">
+            <div class="revision-modal revision-study-modal" role="dialog" aria-modal="true" aria-label="Session de revision flashcard">
+                <div class="revision-modal-header">
+                    <h3>Carte ${session.currentIndex + 1} / ${session.queue.length}</h3>
+                    <button class="revision-modal-close" type="button" data-revision-action="stop" aria-label="Fermer la session">×</button>
+                </div>
+                <div class="revision-modal-body">
+                    <button class="revision-flashcard ${session.flipped ? 'is-back' : 'is-front'}" type="button" data-revision-action="flip">
+                        <div class="revision-card-face">${faceLabel}</div>
+                        <div class="revision-card-text">${escHtml(text)}</div>
+                        <div class="revision-card-meta">Source: ${escHtml(sourceLabel || 'Bloc pedagogique')}</div>
+                        <div class="revision-flashcard-hint">Cliquez sur la carte pour ${session.flipped ? 'revenir a la question' : 'voir la reponse'}.</div>
+                    </button>
+                    ${session.flipped
+                        ? `<div class="revision-answer-row">
+                            <button class="revision-answer-btn again" type="button" data-revision-action="answer" data-answer="AGAIN">${REVISION_ANSWER_LABELS.AGAIN}</button>
+                            <button class="revision-answer-btn hard" type="button" data-revision-action="answer" data-answer="HARD">${REVISION_ANSWER_LABELS.HARD}</button>
+                            <button class="revision-answer-btn good" type="button" data-revision-action="answer" data-answer="GOOD">${REVISION_ANSWER_LABELS.GOOD}</button>
+                            <button class="revision-answer-btn easy" type="button" data-revision-action="answer" data-answer="EASY">${REVISION_ANSWER_LABELS.EASY}</button>
+                        </div>`
+                        : ''
+                    }
+                </div>
+            </div>
+        </div>`;
+}
+
+function _ensureRevisionConfigModal() {
+    if (_revisionConfigModal) return _revisionConfigModal;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'revision-config-overlay';
+    overlay.className = 'revision-modal-overlay';
+    overlay.innerHTML = `
+        <div class="revision-modal" role="dialog" aria-modal="true" aria-labelledby="revision-config-title">
+            <div class="revision-modal-header">
+                <h3 id="revision-config-title">Configuration du mode revision</h3>
+                <button class="revision-modal-close" type="button" data-action="close">×</button>
+            </div>
+            <div class="revision-modal-body">
+                <section class="revision-section">
+                    <h4>Blocs inclus automatiquement</h4>
+                    <div id="revision-fixed-types" class="revision-session-stats"></div>
+                </section>
+                <section class="revision-section">
+                    <h4>Configuration des flashcards</h4>
+                    <div class="revision-empty">Les flashcards ne s ajoutent plus ici. Renseignez le champ Flashcard (question) dans les blocs A retenir, Attention / Piege et Rappel / Prerequis.</div>
+                </section>
+                <section class="revision-section">
+                    <h4>Options de session</h4>
+                    <div class="revision-inline-options">
+                        <label><input type="checkbox" id="revision-shuffle-cards"> Melanger les cartes</label>
+                        <label><input type="checkbox" id="revision-use-srs"> Activer repetition espacee</label>
+                        <label>Durée (min)
+                            <input type="number" min="1" max="180" id="revision-session-duration" class="revision-number-input">
+                        </label>
+                    </div>
+                </section>
+                <section class="revision-section">
+                    <h4>Etat actuel</h4>
+                    <div class="revision-session-stats" id="revision-config-stats"></div>
+                </section>
+                <div class="revision-modal-footer">
+                    <button class="btn btn-ghost" type="button" data-action="cancel">Fermer</button>
+                    <button class="btn btn-primary" type="button" data-action="save">Enregistrer</button>
+                </div>
+            </div>
+        </div>`;
+
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.classList.remove('active');
+    overlay._close = close;
+
+    overlay.addEventListener('click', evt => {
+        if (evt.target === overlay) close();
+    });
+
+    overlay.querySelector('[data-action="close"]').addEventListener('click', close);
+    overlay.querySelector('[data-action="cancel"]').addEventListener('click', close);
+
+    overlay.querySelector('[data-action="save"]').addEventListener('click', () => {
+        const revision = ensureRevisionState();
+        revision.config.visibleBlocTypes = [...REVISION_ALLOWED_BLOCK_TYPES];
+        revision.config.flashcardSources = [...REVISION_ALLOWED_BLOCK_TYPES];
+        revision.config.shuffleCards = !!overlay.querySelector('#revision-shuffle-cards')?.checked;
+        revision.config.useSpacedRepetition = !!overlay.querySelector('#revision-use-srs')?.checked;
+        revision.config.sessionDuration = Math.max(
+            1,
+            Number(overlay.querySelector('#revision-session-duration')?.value) || 15
+        );
+
+        save();
+        refresh();
+        close();
+    });
+
+    _revisionConfigModal = overlay;
+    return overlay;
+}
+
+function _renderRevisionConfigModal() {
+    const overlay = _ensureRevisionConfigModal();
+    const revision = ensureRevisionState();
+    const config = revision.config;
+    const fixedTypesWrap = overlay.querySelector('#revision-fixed-types');
+    fixedTypesWrap.innerHTML = REVISION_ALLOWED_BLOCK_TYPES.map(type =>
+        `<span class="revision-stat">${escHtml(getBlockTypeLabel(type))}</span>`
+    ).join('');
+
+    overlay.querySelector('#revision-shuffle-cards').checked = !!config.shuffleCards;
+    overlay.querySelector('#revision-use-srs').checked = !!config.useSpacedRepetition;
+    overlay.querySelector('#revision-session-duration').value = Math.max(1, Number(config.sessionDuration) || 15);
+
+    const stats = overlay.querySelector('#revision-config-stats');
+    const availableCards = _getRevisionCardsByConfig();
+    const dueCards = _getDueRevisionCards();
+    stats.innerHTML = `
+        <span class="revision-stat">Cartes configurees: ${availableCards.length}</span>
+        <span class="revision-stat">Cartes dues: ${dueCards.length}</span>`;
+}
+
+function openRevisionConfigModal() {
+    if (state.mode !== 'prof') {
+        showToast('Passez en mode prof pour configurer la revision.', 'warn');
+        return;
+    }
+    const overlay = _ensureRevisionConfigModal();
+    _renderRevisionConfigModal();
+    overlay.classList.add('active');
+}
+
+function closeRevisionConfigModal() {
+    if (_revisionConfigModal?._close) _revisionConfigModal._close();
+}
+
 // ===== EXPOSITION GLOBALE (pour les handlers onclick inline) =====
 window.setMode = setMode;
 window.showContextMenu = showContextMenu;
@@ -406,6 +1120,11 @@ window.insertModalOpenBlock = insertModalOpenBlock;
 window.insertModalAddPage = insertModalAddPage;
 window.filterInsertBlocks = filterInsertBlocks;
 window.startEditPageTitle = startEditPageTitle;
+window.openRevisionConfigModal = openRevisionConfigModal;
+window.startRevisionSession = startRevisionSession;
+window.stopRevisionSession = stopRevisionSession;
+window.flipRevisionCard = flipRevisionCard;
+window.answerRevisionCard = answerRevisionCard;
 
 // ===== INLINE RENAME — EXERCICE =====
 function startEditExerciseTitle(blockId, defaultLabel) {
@@ -611,6 +1330,426 @@ function checkMatch(btn) {
     }
 }
 
+// ===== CARTE D'ARGUMENT — INTERACTIONS =====
+function _getBlockIndexById(blockId) {
+    return state.blocks.findIndex(b => String(b.id) === String(blockId));
+}
+
+function _withArgumentMap(blockId, mutator, { persist = true } = {}) {
+    const idx = _getBlockIndexById(blockId);
+    if (idx < 0) return false;
+    const block = state.blocks[idx];
+    if (block.type !== 'argument-map') return false;
+    const map = ensureArgumentMap(block);
+    const changed = mutator(block, map);
+    if (!changed) return false;
+    refresh();
+    if (persist) save();
+    return true;
+}
+
+function argMapAddNode(blockId, parentId, role) {
+    if (state.mode !== 'prof') {
+        showToast('Passez en mode prof pour modifier la carte.', 'warn');
+        return;
+    }
+
+    _withArgumentMap(blockId, (_block, map) => {
+        const node = addArgumentChild(map.thesis, parentId, role, {
+            author: 'Prof',
+            isPlaceholder: true
+        });
+        if (!node) {
+            showToast('Nœud parent introuvable.', 'error');
+            return false;
+        }
+        return true;
+    });
+}
+
+let _argMapDragNode = null;
+
+function _readArgMapDragPayload(evt) {
+    if (_argMapDragNode?.blockId && _argMapDragNode?.nodeId) {
+        return {
+            blockId: String(_argMapDragNode.blockId),
+            nodeId: String(_argMapDragNode.nodeId)
+        };
+    }
+
+    if (!evt?.dataTransfer) return null;
+    const raw = evt.dataTransfer.getData('application/x-manuelo-argnode')
+        || evt.dataTransfer.getData('text/plain');
+    if (!raw) return null;
+
+    try {
+        const parsed = JSON.parse(raw);
+        if (parsed?.blockId && parsed?.nodeId) {
+            return {
+                blockId: String(parsed.blockId),
+                nodeId: String(parsed.nodeId)
+            };
+        }
+    } catch (_err) {
+        const parts = raw.split('::');
+        if (parts.length === 2 && parts[0] && parts[1]) {
+            return {
+                blockId: String(parts[0]),
+                nodeId: String(parts[1])
+            };
+        }
+    }
+
+    return null;
+}
+
+function argMapStartNodeDrag(blockIdOrEvent, nodeId, evtMaybe) {
+    let blockId = blockIdOrEvent;
+    let evt = evtMaybe;
+
+    if (blockIdOrEvent && typeof blockIdOrEvent === 'object' && blockIdOrEvent.type === 'dragstart') {
+        evt = blockIdOrEvent;
+    }
+
+    if (state.mode !== 'prof') return;
+
+    const dragNodeEl = evt?.currentTarget?.closest
+        ? evt.currentTarget.closest('.arg-node')
+        : (evt?.target?.closest ? evt.target.closest('.arg-node') : null);
+
+    const safeBlockId = String((dragNodeEl?.dataset.blockId || blockId || '')).trim();
+    const safeNodeId = String((dragNodeEl?.dataset.nodeId || nodeId || '')).trim();
+    if (!safeBlockId || !safeNodeId) return;
+
+    _argMapDragNode = { blockId: safeBlockId, nodeId: safeNodeId };
+    if (evt?.stopPropagation) evt.stopPropagation();
+    if (dragNodeEl) dragNodeEl.classList.add('is-dragging');
+
+    if (evt?.dataTransfer) {
+        evt.dataTransfer.effectAllowed = 'move';
+        const rawPayload = JSON.stringify(_argMapDragNode);
+        evt.dataTransfer.setData('application/x-manuelo-argnode', rawPayload);
+        evt.dataTransfer.setData('text/plain', `${safeBlockId}::${safeNodeId}`);
+    }
+}
+
+function argMapEndNodeDrag() {
+    document.querySelectorAll('.arg-node.is-dragging, .arg-node.drag-over').forEach(el => {
+        el.classList.remove('is-dragging', 'drag-over');
+    });
+    _argMapDragNode = null;
+}
+
+function argMapAllowNodeDrop(evt) {
+    if (evt?.preventDefault) evt.preventDefault();
+    if (evt?.stopPropagation) evt.stopPropagation();
+    if (evt?.dataTransfer) evt.dataTransfer.dropEffect = 'move';
+}
+
+function argMapEnterNodeDropTarget(evt) {
+    const target = evt?.currentTarget || (evt?.target?.closest ? evt.target.closest('.arg-node') : null);
+    if (!target) return;
+    if (evt?.preventDefault) evt.preventDefault();
+    target.classList.add('drag-over');
+}
+
+function argMapLeaveNodeDropTarget(evt) {
+    const target = evt?.currentTarget || (evt?.target?.closest ? evt.target.closest('.arg-node') : null);
+    if (!target) return;
+    target.classList.remove('drag-over');
+}
+
+function argMapDropNode(blockIdOrEvent, targetNodeId, evtMaybe) {
+    let blockId = blockIdOrEvent;
+    let evt = evtMaybe;
+
+    if (blockIdOrEvent && typeof blockIdOrEvent === 'object' && blockIdOrEvent.type === 'drop') {
+        evt = blockIdOrEvent;
+        const targetNodeEl = evt?.currentTarget?.closest
+            ? evt.currentTarget.closest('.arg-node')
+            : (evt?.target?.closest ? evt.target.closest('.arg-node') : null);
+        blockId = targetNodeEl?.dataset.blockId;
+        targetNodeId = targetNodeEl?.dataset.nodeId;
+    }
+
+    if (evt?.preventDefault) evt.preventDefault();
+    if (evt?.stopPropagation) evt.stopPropagation();
+
+    const dragPayload = _readArgMapDragPayload(evt);
+    if (state.mode !== 'prof' || !dragPayload) return;
+
+    const safeBlockId = String(blockId || '').trim();
+    const safeTargetNodeId = String(targetNodeId || '').trim();
+    if (!safeBlockId || !safeTargetNodeId) {
+        _argMapDragNode = null;
+        return;
+    }
+
+    if (String(dragPayload.blockId) !== safeBlockId) {
+        _argMapDragNode = null;
+        return;
+    }
+
+    // No-op: dropped on the same node.
+    if (String(dragPayload.nodeId) === safeTargetNodeId) {
+        document.querySelectorAll('.arg-node.drag-over').forEach(el => el.classList.remove('drag-over'));
+        _argMapDragNode = null;
+        return;
+    }
+
+    _withArgumentMap(safeBlockId, (_block, map) => {
+        const moved = moveArgumentNode(map.thesis, dragPayload.nodeId, safeTargetNodeId);
+        if (!moved) {
+            showToast('Déplacement impossible pour ce nœud.', 'warn');
+            return false;
+        }
+        return true;
+    });
+
+    document.querySelectorAll('.arg-node.drag-over').forEach(el => el.classList.remove('drag-over'));
+    _argMapDragNode = null;
+}
+
+let _argNodeEditModal = null;
+let _argNodeEditModalEscHandler = null;
+
+function _ensureArgNodeEditModal() {
+    if (_argNodeEditModal) return _argNodeEditModal;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'arg-node-modal-overlay';
+    overlay.className = 'arg-node-modal-overlay';
+    overlay.innerHTML = `
+        <div class="arg-node-modal" role="dialog" aria-modal="true" aria-labelledby="arg-node-modal-title">
+            <div class="arg-node-modal-header">
+                <h3 id="arg-node-modal-title">Modifier le nœud</h3>
+                <button type="button" class="arg-node-modal-close" data-action="close" aria-label="Fermer">×</button>
+            </div>
+            <form class="arg-node-modal-form">
+                <label>
+                    Texte de l'argument
+                    <textarea name="content" rows="4" placeholder="Saisissez l'argument..."></textarea>
+                </label>
+                <label>
+                    Auteur (optionnel)
+                    <input type="text" name="author" placeholder="Ex: Kant" />
+                </label>
+                <label>
+                    ID bloc source ManuelO (optionnel)
+                    <input type="text" name="sourceRef" placeholder="Ex: b42" />
+                </label>
+                <label>
+                    Lien externe (optionnel)
+                    <input type="url" name="externalUrl" placeholder="https://..." />
+                </label>
+                <label>
+                    Texte source libre (optionnel)
+                    <textarea name="sourceText" rows="3" placeholder="Citation ou note de source..."></textarea>
+                </label>
+                <div class="arg-node-modal-actions">
+                    <button type="button" class="arg-node-modal-btn secondary" data-action="cancel">Annuler</button>
+                    <button type="submit" class="arg-node-modal-btn primary">Enregistrer</button>
+                </div>
+            </form>
+        </div>`;
+
+    document.body.appendChild(overlay);
+
+    const close = () => {
+        overlay.classList.remove('active');
+        overlay._onSave = null;
+        if (_argNodeEditModalEscHandler) {
+            document.removeEventListener('keydown', _argNodeEditModalEscHandler);
+            _argNodeEditModalEscHandler = null;
+        }
+    };
+
+    overlay.addEventListener('click', evt => {
+        if (evt.target === overlay) close();
+    });
+
+    overlay.querySelector('[data-action="close"]').addEventListener('click', close);
+    overlay.querySelector('[data-action="cancel"]').addEventListener('click', close);
+
+    overlay.querySelector('form').addEventListener('submit', evt => {
+        evt.preventDefault();
+        if (typeof overlay._onSave !== 'function') {
+            close();
+            return;
+        }
+
+        const values = {
+            content: overlay.querySelector('[name="content"]').value,
+            author: overlay.querySelector('[name="author"]').value,
+            sourceRef: overlay.querySelector('[name="sourceRef"]').value,
+            externalUrl: overlay.querySelector('[name="externalUrl"]').value,
+            sourceText: overlay.querySelector('[name="sourceText"]').value
+        };
+
+        const shouldClose = overlay._onSave(values);
+        if (shouldClose !== false) close();
+    });
+
+    overlay._close = close;
+    _argNodeEditModal = overlay;
+    return overlay;
+}
+
+function _openArgNodeEditModal(initialValues, onSave) {
+    const overlay = _ensureArgNodeEditModal();
+    overlay.querySelector('[name="content"]').value = initialValues.content || '';
+    overlay.querySelector('[name="author"]').value = initialValues.author || '';
+    overlay.querySelector('[name="sourceRef"]').value = initialValues.sourceRef || '';
+    overlay.querySelector('[name="externalUrl"]').value = initialValues.externalUrl || '';
+    overlay.querySelector('[name="sourceText"]').value = initialValues.sourceText || '';
+    overlay._onSave = onSave;
+    overlay.classList.add('active');
+
+    _argNodeEditModalEscHandler = evt => {
+        if (evt.key !== 'Escape') return;
+        evt.preventDefault();
+        overlay._close();
+    };
+    document.addEventListener('keydown', _argNodeEditModalEscHandler);
+
+    requestAnimationFrame(() => {
+        overlay.querySelector('[name="content"]').focus();
+        overlay.querySelector('[name="content"]').select();
+    });
+}
+
+function argMapToggleNode(blockId, nodeId) {
+    _withArgumentMap(blockId, (_block, map) => {
+        const ok = toggleArgumentNode(map.thesis, nodeId);
+        if (!ok) {
+            showToast('Nœud introuvable.', 'error');
+            return false;
+        }
+        return true;
+    });
+}
+
+function argMapDeleteNode(blockId, nodeId) {
+    if (state.mode !== 'prof') {
+        showToast('Passez en mode prof pour supprimer un nœud.', 'warn');
+        return;
+    }
+
+    _withArgumentMap(blockId, (_block, map) => {
+        const ok = removeArgumentNode(map.thesis, nodeId);
+        if (!ok) {
+            showToast('La thèse centrale ne peut pas être supprimée.', 'warn');
+            return false;
+        }
+        return true;
+    });
+}
+
+function argMapEditNode(blockId, nodeId) {
+    if (state.mode !== 'prof') {
+        showToast('Passez en mode prof pour éditer un nœud.', 'warn');
+        return;
+    }
+
+    const idx = _getBlockIndexById(blockId);
+    if (idx < 0) return;
+    const block = state.blocks[idx];
+    const map = ensureArgumentMap(block);
+    const found = findArgumentNode(map.thesis, nodeId);
+    if (!found || !found.node) {
+        showToast('Nœud introuvable.', 'error');
+        return;
+    }
+
+    const node = found.node;
+
+    _openArgNodeEditModal({
+        content: node.content || '',
+        author: node.author || '',
+        sourceRef: node.sourceRef || '',
+        externalUrl: node.externalUrl || '',
+        sourceText: node.sourceText || ''
+    }, values => {
+        const rawExternalUrl = String(values.externalUrl || '').trim();
+        const cleanUrl = sanitizeArgumentExternalUrl(rawExternalUrl);
+        if (rawExternalUrl && !cleanUrl) {
+            showToast('URL externe invalide (http/https uniquement).', 'error');
+            return false;
+        }
+
+        const updated = _withArgumentMap(blockId, (_b, m) => updateArgumentNode(m.thesis, nodeId, {
+            content: String(values.content || '').trim(),
+            author: String(values.author || '').trim(),
+            sourceRef: String(values.sourceRef || '').trim(),
+            externalUrl: cleanUrl,
+            sourceText: String(values.sourceText || '').trim(),
+            isPlaceholder: !String(values.content || '').trim()
+        }));
+
+        if (!updated) {
+            showToast('Nœud introuvable.', 'error');
+            return false;
+        }
+        return true;
+    });
+}
+
+function argMapToggleNodeRoleAction(blockId, nodeId) {
+    if (state.mode !== 'prof') return;
+    _withArgumentMap(blockId, (_block, map) => {
+        const ok = toggleArgumentNodeRole(map.thesis, nodeId);
+        return !!ok;
+    });
+}
+
+function argMapJumpToSource(blockId, nodeId) {
+    const idx = _getBlockIndexById(blockId);
+    if (idx < 0) return;
+    const block = state.blocks[idx];
+    const map = ensureArgumentMap(block);
+    const found = findArgumentNode(map.thesis, nodeId);
+    if (!found || !found.node) return;
+
+    const node = found.node;
+    let missingBlockRef = false;
+
+    if (node.sourceRef) {
+        const targetIndex = _getBlockIndexById(node.sourceRef);
+        if (targetIndex < 0) {
+            missingBlockRef = true;
+        } else {
+            state.currentPage = state.blocks.slice(0, targetIndex + 1).filter(b => b.type === 'page-break').length + 1;
+            refresh();
+            requestAnimationFrame(() => {
+                const wrap = document.querySelector(`.block-wrapper[data-index="${targetIndex}"]`);
+                if (!wrap) return;
+                wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                wrap.classList.add('argmap-target-pulse');
+                setTimeout(() => wrap.classList.remove('argmap-target-pulse'), 1400);
+            });
+            return;
+        }
+    }
+
+    const safeExternalUrl = sanitizeArgumentExternalUrl(node.externalUrl);
+    if (safeExternalUrl) {
+        window.open(safeExternalUrl, '_blank', 'noopener,noreferrer');
+        return;
+    }
+
+    if (node.sourceText) {
+        showToast(node.sourceText, 'info');
+        return;
+    }
+
+    if (missingBlockRef) {
+        showToast(`Bloc source introuvable: ${node.sourceRef}`, 'error');
+        return;
+    }
+
+    showToast('Aucune source liée à ce nœud.', 'info');
+}
+
 // ===== DIAGRAMME — BASCULER CODE ↔ RENDU =====
 function toggleDiagramView(btn) {
     const container = btn.closest('.block-diagram');
@@ -628,6 +1767,18 @@ window.checkFill          = checkFill;
 window.checkSort          = checkSort;
 window.checkMatch         = checkMatch;
 window.toggleDiagramView  = toggleDiagramView;
+window.argMapAddNode = argMapAddNode;
+window.argMapStartNodeDrag = argMapStartNodeDrag;
+window.argMapEndNodeDrag = argMapEndNodeDrag;
+window.argMapAllowNodeDrop = argMapAllowNodeDrop;
+window.argMapEnterNodeDropTarget = argMapEnterNodeDropTarget;
+window.argMapLeaveNodeDropTarget = argMapLeaveNodeDropTarget;
+window.argMapDropNode = argMapDropNode;
+window.argMapToggleNode = argMapToggleNode;
+window.argMapDeleteNode = argMapDeleteNode;
+window.argMapEditNode = argMapEditNode;
+window.argMapToggleNodeRole = argMapToggleNodeRoleAction;
+window.argMapJumpToSource = argMapJumpToSource;
 
 // ===== TIMER =====
 let _timerTotal     = 0;
@@ -743,6 +1894,15 @@ window.resetTimer        = resetTimer;
 window.toggleVocabTooltip = toggleVocabTooltip;
 
 // ===== MODE PRÉSENTATION — globals =====
+window.openPdfExport          = openPdfExport;
+window.closePdfExport         = closePdfExport;
+window.closePdfExportOnOverlay = closePdfExportOnOverlay;
+window.launchPrint            = launchPrint;
+window.enterBookView  = enterBookView;
+window.exitBookView   = exitBookView;
+window.bookGo         = bookGo;
+window.bookGoTo       = bookGoTo;
+window.bookSetTheme   = bookSetTheme;
 window.enterPresentation = enterPresentation;
 window.exitPresentation  = exitPresentation;
 window.presGo            = presGo;
@@ -806,6 +1966,7 @@ document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
         closeModal();
         closeInsertModal();
+        closeRevisionConfigModal();
         closeSommaire();
     }
 });
@@ -821,6 +1982,8 @@ async function loadManual(id) {
 
         Object.assign(state.meta, data.meta || {});
         state.meta.id = id;
+        state.revision = normalizeRevisionState(data.revision || createDefaultRevisionState());
+        _runtimeRevisionSession = null;
         if (Array.isArray(data.blocks)) {
             state.blocks.length = 0;
             data.blocks.forEach(b => state.blocks.push(b));
@@ -833,6 +1996,8 @@ async function loadManual(id) {
         console.warn('[load] Nouveau manuel :', err.message);
         state.meta.id = id;
         state.meta.createdAt = Math.floor(Date.now() / 1000);
+        state.revision = createDefaultRevisionState();
+        _runtimeRevisionSession = null;
     }
 }
 
@@ -848,6 +2013,5 @@ async function loadManual(id) {
 
     await loadManual(id);
     renderSidebar();
-    refresh();
-    initSortable();
+    setMode(state.mode || 'prof');
 })();

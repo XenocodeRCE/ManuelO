@@ -1,6 +1,6 @@
 // Mode présentation — plein écran, un bloc = une slide
 
-import { state } from './state.js';
+import { state, REVISION_ALLOWED_BLOCK_TYPES } from './state.js';
 import { renderBlockContent } from './render.js';
 
 let slides   = [];   // blocs visibles à présenter
@@ -9,9 +9,14 @@ let hudTimer = null; // timer auto-hide du HUD
 
 // ─── Entrée ────────────────────────────────────────────────────────────────
 export function enterPresentation() {
+    const revisionVisibleSet = state.mode === 'revision'
+        ? new Set(REVISION_ALLOWED_BLOCK_TYPES)
+        : null;
+
     slides = state.blocks.filter(b => {
         if (b.type === 'page-break') return false;
-        if (!b.visible && state.mode === 'eleve') return false;
+        if (!b.visible && state.mode !== 'prof') return false;
+        if (revisionVisibleSet && !revisionVisibleSet.has(b.type)) return false;
         return true;
     });
     if (!slides.length) return;

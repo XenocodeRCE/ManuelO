@@ -1,0 +1,210 @@
+{
+    "meta": {
+        "id": "7cdb5877-cfa4-477a-a3a6-13b86ec55f21",
+        "title": "Le manuel de philosophie",
+        "subject": "Philosophie",
+        "level": "Terminale",
+        "page1Title": "C'est la page 1",
+        "page1Subtitle": "c'est le sous-titre de la page 1",
+        "createdAt": 1778004741,
+        "updatedAt": 1778063850
+    },
+    "blocks": [
+        {
+            "id": "b101",
+            "type": "citation",
+            "visible": true,
+            "quote": "{zefze |C'est un chamalo}",
+            "author": "zefzef",
+            "source": "zefzef"
+        },
+        {
+            "id": "b102",
+            "type": "media",
+            "visible": true,
+            "title": "La technique",
+            "url": "https:\/\/www.youtube.com\/watch?v=n-gYFcVx-8Y",
+            "mediaType": "vidéo",
+            "description": "Trophées NSI"
+        },
+        {
+            "id": "b103",
+            "type": "diagram",
+            "visible": true,
+            "title": "Basic Pie Chart",
+            "code": "pie title NETFLIX\n         \"Time spent looking for movie\" : 90\n         \"Time spent watching it\" : 10\n",
+            "caption": "Sur le site de mermaidjs"
+        },
+        {
+            "id": "b104",
+            "type": "timeline",
+            "visible": true,
+            "title": "Chronologie philo",
+            "events": "-427|Naissance de Platon\n-384|Naissance d'Aristote\n-322|Mort d'Aristote"
+        },
+        {
+            "id": "b105",
+            "type": "table",
+            "visible": true,
+            "headers": "Concept|Définition|Exemple",
+            "rows": "Technique|Savoir-faire|Le marteau\nNature|Ensemble des choses|Le bois",
+            "caption": "Comparaison des concepts"
+        },
+        {
+            "id": "b106",
+            "type": "objectives",
+            "visible": true,
+            "items": "objectif de la séance\nun deuxième objectif"
+        },
+        {
+            "id": "b107",
+            "type": "summary",
+            "visible": true,
+            "items": "il faut absolument retenir que"
+        },
+        {
+            "id": "b108",
+            "type": "method",
+            "visible": true,
+            "title": "Comment rédiger une conclusion",
+            "steps": "Synthèse de ce qui s'est passé\nFormulation de la réponse\nPAS D'OUVERTURE sinon ya la guerre"
+        },
+        {
+            "id": "b110",
+            "type": "warning",
+            "visible": true,
+            "content": "Ne pas traverser quand le feu est rouge"
+        },
+        {
+            "id": "b111",
+            "type": "recall",
+            "visible": true,
+            "content": "Vous devez ==absolument ==connaître vos **{identités remarquables|c'est un truc tkt}** !"
+        },
+        {
+            "id": "b112",
+            "type": "biography",
+            "visible": true,
+            "name": "Aristote",
+            "dates": "-384 à -322",
+            "role": "Humain",
+            "content": "C'est juste un Grec comme les autres à cette époque là",
+            "avatarUrl": "https:\/\/assets3.thrillist.com\/v1\/image\/3194366\/792x1009\/scale;webp=auto;jpeg_quality=60.jpg"
+        },
+        {
+            "id": "b113",
+            "type": "example",
+            "visible": true,
+            "title": "Le passage à niveau sur l'autoroute",
+            "content": "Alors voilà test un deux trois"
+        },
+        {
+            "id": "b114",
+            "type": "exercise-written",
+            "visible": true,
+            "prompt": "Expliquez le dilemme du Tramway",
+            "lines": 5,
+            "title": "Exercice de réflexion"
+        },
+        {
+            "id": "b115",
+            "type": "exercise-fill",
+            "visible": true,
+            "text": "La ___ permet à l'homme de pallier son ___ naturel.",
+            "blanks": [
+                {
+                    "correct": "technique",
+                    "distractors": [
+                        "instinct",
+                        "passion"
+                    ]
+                },
+                {
+                    "correct": "dénuement",
+                    "distractors": [
+                        "pouvoir",
+                        "bonheur"
+                    ]
+                }
+            ],
+            "title": ""
+        },
+        {
+            "id": "b116",
+            "type": "exercise-truefalse",
+            "visible": true,
+            "statements": "La technique est propre à l'homme\nLa nature précède la technique",
+            "answers": "V\nF"
+        },
+        {
+            "id": "b117",
+            "type": "exercise-match",
+            "visible": true,
+            "leftItems": "Platon\nAristote\nKant",
+            "rightItems": "Protagoras\nÉthique à Nicomaque\nCritique de la raison pure"
+        },
+        {
+            "id": "b118",
+            "type": "exercise-document",
+            "visible": true,
+            "docTitle": "le odcument un",
+            "content": "ozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah gozeifj oziefo zeofnzoeif oiah g",
+            "source": "Platon, dans un rêve",
+            "questions": "Identifiez la **thèse**\nIdentifiez les **limites **de cette thèse"
+        },
+        {
+            "id": "b119",
+            "type": "exercise-sort",
+            "visible": true,
+            "instruction": "Ordonnez svp",
+            "items": "Introduction\nDéveloppement — Partie 1\nDéveloppement — Partie 2\nConclusion"
+        },
+        {
+            "id": "b120",
+            "type": "activity-group",
+            "visible": true,
+            "title": "Débat sur la technique",
+            "duration": "20 minutes",
+            "groups": "4 groupes de 25 élèves",
+            "instructions": "Chaque groupe doit battre l'autre au pugilat "
+        },
+        {
+            "id": "b121",
+            "type": "activity-oral",
+            "visible": true,
+            "activityType": "Exposé",
+            "title": "La technique nous libère-t-elle ?",
+            "instructions": "Préparez un exposé de 6 minutes sur ce sujet de dissertation",
+            "duration": "6 minutes"
+        },
+        {
+            "id": "b126",
+            "type": "differentiation",
+            "visible": true,
+            "standard": "Pour le groupe 1 vous devez expliquer la thèse de Platon",
+            "advanced": "Pour le groupe 2 vous devez trouver la thèse d'Aristote",
+            "supported": "Pour le groupe 3 vous devez faire l'exercice 25 page 134"
+        },
+        {
+            "id": "b122",
+            "type": "activity-instruction",
+            "visible": true,
+            "title": "Activité 1 - Analyser de texte",
+            "instructions": "Lisez attentivement le texte et répondez aux questions au tableau"
+        },
+        {
+            "type": "page-break",
+            "id": 124,
+            "visible": true,
+            "title": "Page 2",
+            "subtitle": "La méthode en philosophie"
+        },
+        {
+            "id": "b125",
+            "type": "section-title",
+            "visible": true,
+            "number": "Section 1",
+            "content": "C'est quoi une dissertation ?"
+        }
+    ]
+}

@@ -26,10 +26,25 @@ export async function saveNow() {
     setStatus('saving');
 
     try {
+        const revisionPayload = state.revision
+            ? {
+                ...state.revision,
+                // Session UI is transient and should not overwrite persisted data.
+                session: null
+            }
+            : null;
+
         const res = await fetch(SAVE_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: state.meta.id, data: { meta: state.meta, blocks: state.blocks } })
+            body: JSON.stringify({
+                id: state.meta.id,
+                data: {
+                    meta: state.meta,
+                    blocks: state.blocks,
+                    revision: revisionPayload
+                }
+            })
         });
 
         const json = await res.json();

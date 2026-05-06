@@ -1,0 +1,463 @@
+/* =======================================================
+   BOOK VIEW — Overlay, spread, pages, thumbnails, themes
+   ======================================================= */
+
+/* ── Toolbar button ── */
+#btn-book {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border: none;
+    background: transparent;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+    font-family: inherit;
+}
+#btn-book:hover {
+    background: var(--bg-alt);
+    color: var(--text);
+}
+#btn-book svg { flex-shrink: 0; }
+
+/* ── Full-screen overlay ── */
+#book-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 8500;
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    overflow: hidden;
+}
+#book-overlay.active {
+    display: flex;
+}
+
+/* ── Themes — overlay background ── */
+#book-overlay.book-theme-light { background: #c8c4bb; }
+#book-overlay.book-theme-sepia  { background: #b5a48a; }
+#book-overlay.book-theme-dark   { background: #0d0d18; }
+
+/* ── HUD (top bar) ── */
+#book-hud {
+    height: 50px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    gap: 12px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+}
+#book-hud.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+.book-hud-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+.book-hud-group-right {
+    flex-shrink: 0;
+}
+#book-hud-title {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.85;
+    max-width: 220px;
+}
+#book-counter {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+    white-space: nowrap;
+    letter-spacing: 0.03em;
+}
+#book-theme-select {
+    padding: 5px 8px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    color: #fff;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    outline: none;
+}
+#book-theme-select option { background: #222; color: #fff; }
+.book-hud-btn {
+    width: 30px;
+    height: 30px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 7px;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    font-family: inherit;
+}
+.book-hud-btn:hover { background: rgba(255, 255, 255, 0.25); }
+
+/* ── Stage (main area) ── */
+#book-stage {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 16px 12px;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* ── Nav arrow buttons ── */
+.book-nav-btn {
+    flex-shrink: 0;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    font-size: 26px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, transform 0.1s;
+    line-height: 1;
+    font-family: inherit;
+}
+.book-nav-btn:hover { background: rgba(255, 255, 255, 0.28); transform: scale(1.08); }
+.book-nav-btn:disabled { opacity: 0.18; cursor: default; transform: none; }
+
+/* ── Spread (the book itself) ── */
+.book-spread {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+    max-width: 1140px;
+    height: 100%;
+    border-radius: 3px;
+    overflow: hidden;
+    box-shadow: 0 10px 50px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Spread slide animations ── */
+@keyframes bookSlideFromRight {
+    from { opacity: 0.2; transform: translateX(36px); }
+    to   { opacity: 1;   transform: translateX(0); }
+}
+@keyframes bookSlideFromLeft {
+    from { opacity: 0.2; transform: translateX(-36px); }
+    to   { opacity: 1;   transform: translateX(0); }
+}
+.book-spread.slide-in-fwd  { animation: bookSlideFromRight 0.28s ease; }
+.book-spread.slide-in-back { animation: bookSlideFromLeft  0.28s ease; }
+
+/* ── Spine shadow ── */
+.book-spine {
+    width: 10px;
+    flex-shrink: 0;
+    background: linear-gradient(
+        to right,
+        rgba(0,0,0,0.22),
+        rgba(0,0,0,0.06) 40%,
+        rgba(255,255,255,0.04) 60%,
+        rgba(0,0,0,0.22)
+    );
+}
+
+/* ── Individual page ── */
+.book-page {
+    flex: 1;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+    position: relative;
+}
+
+/* Fixed-width inner container — scaled by JS to fit the page without scrolling */
+.book-page-inner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 794px;          /* A4 at 96 dpi — JS scales this to fit */
+    height: 1123px;        /* A4 at 96 dpi */
+    transform-origin: top left;
+    display: flex;
+    flex-direction: column;
+    padding: 28px 32px 20px;
+    font-size: 15px;
+    line-height: 1.65;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* Hidden measurement host used to paginate large ManuelO pages into many book pages */
+#book-measure-host {
+    position: absolute;
+    left: -20000px;
+    top: -20000px;
+    width: 794px;
+    height: 1123px;
+    visibility: hidden;
+    pointer-events: none;
+    overflow: hidden;
+}
+#book-measure-host .book-page {
+    width: 794px;
+    height: 1123px;
+    border-radius: 0;
+    box-shadow: none;
+}
+#book-measure-host .book-page-inner {
+    transform: none !important;
+}
+.book-page-left  {
+    border-radius: 3px 0 0 3px;
+    box-shadow: inset -4px 0 10px rgba(0, 0, 0, 0.1);
+}
+.book-page-right {
+    border-radius: 0 3px 3px 0;
+    box-shadow: inset 4px 0 10px rgba(0, 0, 0, 0.1);
+}
+.book-page-center {
+    border-radius: 3px;
+}
+
+/* Themes — page surface & text */
+.book-theme-light .book-page { background: #fefefe; color: #1a1a2e; }
+.book-theme-sepia  .book-page { background: #f4e9d0; color: #3d2c1a; }
+.book-theme-dark   .book-page { background: #1c1c2e; color: #dde2ef; }
+
+/* ── Page header line (running title) ── */
+.book-page-header-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    border-bottom: 0.5px solid currentColor;
+    opacity: 0.3;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    flex-shrink: 0;
+}
+.book-running       { text-align: left; }
+.book-running-right { text-align: right; width: 100%; }
+
+/* ── Chapter title at top of page ── */
+.book-page-chapter-title {
+    font-size: 18px;
+    font-weight: 800;
+    margin-bottom: 4px;
+    flex-shrink: 0;
+    line-height: 1.25;
+}
+.book-page-chapter-subtitle {
+    font-size: 12px;
+    opacity: 0.55;
+    margin-bottom: 14px;
+    font-style: italic;
+    flex-shrink: 0;
+}
+.book-page-continuation {
+    font-size: 11px;
+    opacity: 0.45;
+    font-style: italic;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+}
+
+/* ── Blocks inside a page ── */
+.book-blocks {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-bottom: 8px;
+}
+.book-block {
+    break-inside: avoid;
+}
+.book-block-slice {
+    overflow: hidden;
+}
+.book-block-slice-viewport {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+}
+.book-block-slice-content {
+    width: 100%;
+}
+.book-page-empty-hint {
+    text-align: center;
+    opacity: 0.3;
+    font-style: italic;
+    margin: auto;
+    font-size: 13px;
+}
+.book-page-blank {
+    flex: 1;
+    opacity: 0.06;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+}
+
+/* ── Page footer (page number) ── */
+.book-page-footer-line {
+    padding-top: 8px;
+    margin-top: auto;
+    border-top: 0.5px solid currentColor;
+    opacity: 0.3;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+.book-pagenum { display: block; }
+.book-pagenum-right { margin-left: auto; }
+
+/* ── Hide all editor-only controls inside book view ── */
+#book-overlay .block-controls,
+#book-overlay .block-drag-handle,
+#book-overlay .exo-edit-icon,
+#book-overlay .block-insert-btn,
+#book-overlay .block-insert-zone,
+#book-overlay .exo-title-input {
+    display: none !important;
+}
+
+/* No scrollbars — pages use scale-to-fit */
+
+/* ── Footer (thumbnails) ── */
+#book-footer {
+    height: 68px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    background: rgba(0, 0, 0, 0.55);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+}
+#book-footer.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+#book-thumbnails {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 6px 2px;
+    -ms-overflow-style: none;  /* IE/Edge */
+    scrollbar-width: none;     /* Firefox 64+ */
+    align-items: center;
+    width: 100%;
+}
+#book-thumbnails::-webkit-scrollbar { display: none; }
+
+.book-thumb {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    background: rgba(255,255,255,0.1);
+    border: 1.5px solid transparent;
+    border-radius: 5px;
+    padding: 5px 8px;
+    cursor: pointer;
+    color: rgba(255,255,255,0.6);
+    transition: all 0.15s;
+    font-family: inherit;
+    min-width: 42px;
+}
+.book-thumb:hover {
+    background: rgba(255,255,255,0.2);
+    color: #fff;
+}
+.book-thumb.active {
+    border-color: #60a5fa;
+    background: rgba(96,165,250,0.2);
+    color: #fff;
+}
+.book-thumb-num {
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+}
+.book-thumb-label {
+    font-size: 9px;
+    opacity: 0.7;
+    max-width: 60px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+/* ── Dark mode overrides for block backgrounds inside book ── */
+#book-overlay.book-theme-dark .block-section-title    { background: rgba(255,255,255,0.05) !important; border-color: rgba(255,255,255,0.1) !important; }
+#book-overlay.book-theme-dark .block-text-intro       { color: inherit; }
+#book-overlay.book-theme-dark .block-definition,
+#book-overlay.book-theme-dark .block-summary,
+#book-overlay.book-theme-dark .block-recall,
+#book-overlay.book-theme-dark .block-warning,
+#book-overlay.book-theme-dark .block-method,
+#book-overlay.book-theme-dark .block-example,
+#book-overlay.book-theme-dark .block-exercise-qcm,
+#book-overlay.book-theme-dark .block-exercise-fill,
+#book-overlay.book-theme-dark .block-exercise-truefalse,
+#book-overlay.book-theme-dark .block-exercise-match,
+#book-overlay.book-theme-dark .block-exercise-sort,
+#book-overlay.book-theme-dark .block-exercise-table,
+#book-overlay.book-theme-dark .block-exercise-written,
+#book-overlay.book-theme-dark .block-exercise-document,
+#book-overlay.book-theme-dark .block-questions,
+#book-overlay.book-theme-dark .block-citation,
+#book-overlay.book-theme-dark .block-biography,
+#book-overlay.book-theme-dark .block-objectives,
+#book-overlay.book-theme-dark .block-distinction {
+    filter: brightness(0.75) saturate(0.8);
+}
+
+/* Sepia — warm tint on blocks */
+#book-overlay.book-theme-sepia .block-text-intro { color: #3d2c1a; }
+
+/* ── Responsive: mobile always single page ── */
+@media (max-width: 1023px) {
+    #book-overlay #book-right { display: none !important; }
+    #book-overlay .book-spine  { display: none !important; }
+    #book-overlay #book-left   { width: 100% !important; }
+    .book-nav-btn { width: 36px; height: 36px; font-size: 20px; }
+}

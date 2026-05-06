@@ -3,6 +3,7 @@
 import { state } from './state.js';
 import { renderBlocks } from './render.js';
 import { save } from './save.js';
+import { createArgumentMap } from './argument-map.js';
 
 export const modalForms = {
     'source-text': { title: 'Texte source', fields: [
@@ -83,17 +84,20 @@ export const modalForms = {
         { key: 'items', label: 'Objectifs (un par ligne)', type: 'textarea', placeholder: 'Comprendre la distinction technique / nature\nAnalyser un texte de Platon\nArgumenter à l\'écrit', rows: 4 }
     ]},
     'summary': { title: 'À retenir', fields: [
-        { key: 'items', label: 'Points clés (un par ligne)', type: 'textarea', placeholder: 'La technique est définie comme…\nOn distingue technique et nature par…', rows: 4 }
+        { key: 'items', label: 'Points clés (un par ligne)', type: 'textarea', placeholder: 'La technique est définie comme…\nOn distingue technique et nature par…', rows: 4 },
+        { key: 'flashcard', label: 'Flashcard (question)', type: 'input', placeholder: 'Ex: Quelle distinction faut-il retenir ici ?' }
     ]},
     'method': { title: 'Méthode', fields: [
         { key: 'title', label: 'Titre de la méthode', type: 'input', placeholder: 'Comment rédiger une introduction de dissertation' },
         { key: 'steps', label: 'Étapes (une par ligne)', type: 'textarea', placeholder: '1. Accrocher le lecteur\n2. Présenter le sujet\n3. Problématiser', rows: 5 }
     ]},
     'warning': { title: 'Attention / Piège', fields: [
-        { key: 'content', label: 'Description du piège ou de l\'erreur', type: 'textarea', placeholder: 'Ne pas confondre la technique avec la technologie…', rows: 3 }
+        { key: 'content', label: 'Description du piège ou de l\'erreur', type: 'textarea', placeholder: 'Ne pas confondre la technique avec la technologie…', rows: 3 },
+        { key: 'flashcard', label: 'Flashcard (question)', type: 'input', placeholder: 'Ex: Quelle confusion faut-il éviter ?' }
     ]},
     'recall': { title: 'Rappel / Prérequis', fields: [
-        { key: 'content', label: 'Ce qu\'il faut déjà savoir', type: 'textarea', placeholder: 'Dans ce chapitre, nous avons vu que…', rows: 3 }
+        { key: 'content', label: 'Ce qu\'il faut déjà savoir', type: 'textarea', placeholder: 'Dans ce chapitre, nous avons vu que…', rows: 3 },
+        { key: 'flashcard', label: 'Flashcard (question)', type: 'input', placeholder: 'Ex: Quel prérequis devez-vous connaître ?' }
     ]},
     'biography': { title: 'Biographie', fields: [
         { key: 'name', label: 'Nom', type: 'input', placeholder: 'Aristote' },
@@ -128,6 +132,12 @@ export const modalForms = {
     'exercise-sort': { title: 'Classement / Ordonnancement', fields: [
         { key: 'instruction', label: 'Consigne', type: 'input', placeholder: 'Remettez les étapes de la dissertation dans l\'ordre' },
         { key: 'items', label: 'Éléments dans le bon ordre (un par ligne)', type: 'textarea', placeholder: 'Introduction\nDéveloppement — Partie 1\nDéveloppement — Partie 2\nConclusion', rows: 4 }
+    ]},
+    'argument-map': { title: 'Carte d\'argument interactive', fields: [
+        { key: 'title', label: 'Titre du bloc (optionnel)', type: 'input', placeholder: 'Ex: La liberté est-elle une illusion ?' },
+        { key: 'thesis', label: 'Thèse centrale', type: 'textarea', placeholder: 'Ex: La liberté est une illusion', rows: 3 },
+        { key: 'hints', label: 'Arguments de départ (ligne 1 = POUR, ligne 2 = CONTRE)', type: 'textarea', placeholder: 'Argument pour\nArgument contre', rows: 3 },
+        { key: 'isExercise', label: 'Mode exercice (oui/non)', type: 'input', placeholder: 'oui ou non' }
     ]},
     'activity-group': { title: 'Travail de groupe', fields: [
         { key: 'title', label: 'Titre de l\'activité', type: 'input', placeholder: 'Débat : technique et progrès' },
@@ -201,6 +211,8 @@ export function submitBlock() {
         const el = document.getElementById('field-' + f.key);
         data[f.key] = el ? el.value : '';
     });
+
+    const parseYesNo = value => /^(1|true|vrai|oui|yes|y)$/i.test(String(value || '').trim());
 
     const newBlock = { id: 'b' + (++state.idCounter), type: state.currentModalType, visible: true };
 
@@ -287,6 +299,7 @@ export function submitBlock() {
             break;
         case 'summary':
             newBlock.items = data.items;
+            newBlock.flashcard = data.flashcard;
             break;
         case 'method':
             newBlock.title = data.title;
@@ -294,9 +307,11 @@ export function submitBlock() {
             break;
         case 'warning':
             newBlock.content = data.content;
+            newBlock.flashcard = data.flashcard;
             break;
         case 'recall':
             newBlock.content = data.content;
+            newBlock.flashcard = data.flashcard;
             break;
         case 'biography':
             newBlock.name = data.name;
@@ -332,6 +347,25 @@ export function submitBlock() {
             newBlock.instruction = data.instruction;
             newBlock.items = data.items;
             break;
+        case 'argument-map': {
+            const thesis = (data.thesis || '').trim() || 'Nouvelle these';
+            const hints = (data.hints || '').split('\n').map(h => h.trim()).filter(Boolean);
+            const isExercise = parseYesNo(data.isExercise);
+
+            newBlock.title = (data.title || '').trim();
+
+            const existing = state.editingIndex !== null ? state.blocks[state.editingIndex] : null;
+            if (existing?.type === 'argument-map' && existing.argMap) {
+                newBlock.argMap = existing.argMap;
+                newBlock.argMap.isExercise = isExercise;
+                newBlock.argMap.showStrength = false;
+                newBlock.argMap.viewMode = 'TREE';
+                if (thesis) newBlock.argMap.thesis.content = thesis;
+            } else {
+                newBlock.argMap = createArgumentMap({ thesis, hints, isExercise });
+            }
+            break;
+        }
         case 'activity-group':
             newBlock.title = data.title;
             newBlock.duration = data.duration;

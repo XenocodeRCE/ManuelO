@@ -1,7 +1,13 @@
 // Rendu des blocs dans la zone de contenu
 
-import { state } from './state.js';
+import { state, REVISION_ALLOWED_BLOCK_TYPES } from './state.js';
 import { parseInline, parseMd } from './markdown.js';
+import {
+    ARGUMENT_ROLE_META,
+    computeArgumentStanceMap,
+    computeArgumentTreeLayout,
+    ensureArgumentMap
+} from './argument-map.js';
 
 // ===== HELPER : URL → embed iframe URL =====
 function getEmbedUrl(raw) {
@@ -63,8 +69,116 @@ function getPageRanges() {
     return ranges;
 }
 
+function getRevisionVisibleTypeSet() {
+    return new Set(REVISION_ALLOWED_BLOCK_TYPES);
+}
+
+function stripMarkdown(raw) {
+    return String(raw || '')
+        .replace(/\[(.*?)\]\((.*?)\)/g, '$1')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/__(.*?)__/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/^[#>\-+\s]+/gm, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function clipText(value, maxLen = 180) {
+    const clean = stripMarkdown(value);
+    if (clean.length <= maxLen) return clean;
+    return `${clean.slice(0, maxLen).trimEnd()}...`;
+}
+
+function renderRevisionCompactBlock(block) {
+    const titleByType = {
+        'section-title': 'Section',
+        'definition': 'Definition',
+        'distinction': 'Distinction',
+        'summary': 'A retenir',
+        'warning': 'Attention / Piege',
+        'recall': 'Rappel',
+        'method': 'Methode',
+        'questions': 'Questionnaire',
+        'biography': 'Biographie',
+        'citation': 'Citation',
+        'argument-map': 'Carte d argument',
+        'source-text': 'Texte source',
+        'text-intro': 'Texte',
+        'objectives': 'Objectifs',
+        'timeline': 'Frise'
+    };
+
+    let heading = titleByType[block.type] || 'Bloc revise';
+    let body = '';
+
+    switch (block.type) {
+        case 'section-title':
+            heading = block.content || heading;
+            body = 'Repere de progression du chapitre';
+            break;
+        case 'definition':
+            heading = block.term || heading;
+            body = clipText(block.content, 180);
+            break;
+        case 'distinction':
+            heading = `${block.termA || 'Terme A'} / ${block.termB || 'Terme B'}`;
+            body = `${clipText(block.explanationA, 110)} ${block.explanationB ? `| ${clipText(block.explanationB, 110)}` : ''}`.trim();
+            break;
+        case 'summary':
+        case 'objectives':
+            body = clipText(block.items, 220);
+            break;
+        case 'warning':
+            body = clipText(block.content, 220);
+            break;
+        case 'recall':
+        case 'method':
+        case 'text-intro':
+        case 'source-text':
+        case 'example':
+            body = clipText(block.content || block.steps || block.instructions, 220);
+            break;
+        case 'questions':
+            body = clipText(Array.isArray(block.questions) ? block.questions.join(' ; ') : block.questions, 220);
+            break;
+        case 'biography':
+            heading = block.name || heading;
+            body = [block.role, block.dates, clipText(block.content, 160)].filter(Boolean).join(' · ');
+            break;
+        case 'citation':
+            body = `${clipText(block.quote, 190)}${block.author ? ` — ${block.author}` : ''}`;
+            break;
+        case 'argument-map': {
+            const map = ensureArgumentMap(block);
+            heading = block.title || heading;
+            body = clipText(map.thesis?.content || '', 220) || 'These principale disponible en mode carte.';
+            break;
+        }
+        default:
+            body = clipText(
+                block.content
+                || block.prompt
+                || block.question
+                || block.title
+                || block.caption
+                || block.instructions,
+                220
+            );
+            break;
+    }
+
+    return `<div class="revision-compact-card">
+        <div class="revision-compact-head">${heading}</div>
+        <div class="revision-compact-meta">${titleByType[block.type] || 'Revision'}</div>
+        <div class="revision-compact-body">${parseInline(body || 'Contenu priorise pour la revision.')}</div>
+    </div>`;
+}
+
 export function renderBlocks() {
     const container = document.getElementById('content-inner');
+    const isRevision = state.mode === 'revision';
+    const revisionVisibleSet = isRevision ? getRevisionVisibleTypeSet() : null;
 
     // Clear everything except the edit-banner
     container.querySelectorAll(
@@ -124,12 +238,14 @@ export function renderBlocks() {
     let anyRendered = false;
     for (let i = page.startIdx; i < page.endIdx; i++) {
         const block = state.blocks[i];
-        if (!block.visible && state.mode === 'eleve') continue;
+        if (!block.visible && state.mode !== 'prof') continue;
+        if (isRevision && revisionVisibleSet && !revisionVisibleSet.has(block.type)) continue;
         anyRendered = true;
 
         const wrapper = document.createElement('div');
         wrapper.className = 'block-wrapper'
             + (canEdit ? ' edit-mode' : '')
+            + (isRevision ? ' revision-mode' : '')
             + (!block.visible ? ' hidden-block' : '');
         wrapper.dataset.index = i;
         wrapper.dataset.type  = block.type;
@@ -137,6 +253,9 @@ export function renderBlocks() {
 
         if (canEdit) {
             wrapper.innerHTML += `
+                <button class="block-drag-handle" title="Déplacer le bloc" aria-label="Déplacer le bloc">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><circle cx="8" cy="6" r="1.2"/><circle cx="16" cy="6" r="1.2"/><circle cx="8" cy="12" r="1.2"/><circle cx="16" cy="12" r="1.2"/><circle cx="8" cy="18" r="1.2"/><circle cx="16" cy="18" r="1.2"/></svg>
+                </button>
                 <div class="block-controls">
                     <button class="block-ctrl-btn move" onclick="moveBlock(${i}, -1)" title="Monter">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
@@ -159,7 +278,7 @@ export function renderBlocks() {
                 </div>`;
         }
 
-        wrapper.innerHTML += renderBlockContent(block);
+        wrapper.innerHTML += isRevision ? renderRevisionCompactBlock(block) : renderBlockContent(block);
         container.appendChild(wrapper);
 
         if (canEdit) container.appendChild(makeInsertZone(i));
@@ -179,10 +298,16 @@ export function renderBlocks() {
     }
 
     // Empty page hint
-    if (!anyRendered && canEdit) {
+    if (!anyRendered) {
         const hint = document.createElement('div');
         hint.className = 'page-empty-hint';
-        hint.textContent = 'Page vide — utilisez + pour ajouter un bloc';
+        if (canEdit) {
+            hint.textContent = 'Page vide — utilisez + pour ajouter un bloc';
+        } else if (isRevision) {
+            hint.textContent = 'Aucun bloc affiche pour cette page en mode revision.';
+        } else {
+            hint.textContent = 'Aucun bloc visible sur cette page.';
+        }
         container.appendChild(hint);
     }
 
@@ -444,6 +569,9 @@ export function renderBlockContent(block) {
             </div>`;
         }
 
+        case 'argument-map':
+            return renderArgumentMapBlock(block);
+
         // ===== PÉDAGOGIE — CALLOUTS =====
 
         case 'objectives': {
@@ -694,9 +822,151 @@ export function renderBlockContent(block) {
     }
 }
 
+function escHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function renderArgumentMapBlock(block) {
+    const map = ensureArgumentMap(block);
+    const layout = computeArgumentTreeLayout(map.thesis, 'TREE');
+    const stanceById = computeArgumentStanceMap(map.thesis);
+    const canEdit = state.mode === 'prof';
+    const nodeById = new Map(layout.nodes.map(n => [n.id, n]));
+
+    const lines = layout.edges.map(edge => {
+        const from = nodeById.get(edge.from);
+        const to = nodeById.get(edge.to);
+        if (!from || !to) return '';
+
+        const edgeRole = to.node.role === 'OBJECTION' ? 'OBJECTION' : 'SUPPORT';
+        const childMeta = ARGUMENT_ROLE_META[edgeRole] || ARGUMENT_ROLE_META.SUPPORT;
+
+        const x1 = from.x;
+        const y1 = from.y + 50;
+        const x2 = to.x;
+        const y2 = to.y - 50;
+        const c1x = x1;
+        const c1y = y1 + 34;
+        const c2x = x2;
+        const c2y = y2 - 34;
+
+        return `<path d="M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}"
+                    stroke="${childMeta.color}"
+                    stroke-width="2"
+                    ${edgeRole === 'OBJECTION' ? 'stroke-dasharray="6 4"' : ''}
+                    fill="none" />`;
+    }).join('');
+
+    const nodes = layout.nodes.map(entry => {
+        const node = entry.node;
+        const role = node.role === 'THESIS' ? 'THESIS' : (node.role === 'OBJECTION' ? 'OBJECTION' : 'SUPPORT');
+        const meta = ARGUMENT_ROLE_META[role] || ARGUMENT_ROLE_META.SUPPORT;
+        const stance = stanceById.get(String(node.id));
+        const hasChildren = (node.children || []).length > 0;
+        const nodeContent = (node.content || '').trim()
+            ? parseMd(node.content)
+            : `<div class="arg-node-placeholder">Cliquez sur Modifier pour ajouter un argument...</div>`;
+
+        const sourceButtons = [
+            node.sourceRef
+                ? `<button class="arg-node-link-btn" onclick="argMapJumpToSource('${escHtml(block.id)}','${escHtml(node.id)}')">📖 Bloc ${escHtml(node.sourceRef)}</button>`
+                : '',
+            node.externalUrl
+                ? `<a class="arg-node-link-btn external" href="${escHtml(node.externalUrl)}" target="_blank" rel="noopener noreferrer">🌐 Lien externe</a>`
+                : ''
+        ].filter(Boolean).join('');
+
+        const sourceText = node.sourceText
+            ? `<div class="arg-node-source-text">${parseInline(node.sourceText)}</div>`
+            : '';
+
+        const thesisStanceBadge = stance?.isThesis
+            ? '<div class="arg-node-thesis-stance thesis">These centrale</div>'
+            : (stance?.supportsThesis
+                ? '<div class="arg-node-thesis-stance for">Soutient la these</div>'
+                : '<div class="arg-node-thesis-stance against">Contredit la these</div>');
+
+        const parentRelationBadge = role === 'THESIS'
+            ? ''
+            : (role === 'SUPPORT'
+                ? '<div class="arg-node-parent-link for">Pour ce point</div>'
+                : '<div class="arg-node-parent-link against">Contre ce point</div>');
+
+        const editControls = canEdit
+            ? `<div class="arg-node-actions">
+                <div class="arg-node-add-actions">
+                    <button class="arg-node-action" title="Ajouter un argument POUR" onclick="argMapAddNode('${escHtml(block.id)}','${escHtml(node.id)}','SUPPORT')">+ Pour</button>
+                    <button class="arg-node-action" title="Ajouter un argument CONTRE" onclick="argMapAddNode('${escHtml(block.id)}','${escHtml(node.id)}','OBJECTION')">+ Contre</button>
+                </div>
+                <div class="arg-node-main-actions">
+                    ${node.role !== 'THESIS' ? `<button class="arg-node-action" onclick="argMapToggleNodeRole('${escHtml(block.id)}','${escHtml(node.id)}')">${role === 'SUPPORT' ? 'Passer en Contre' : 'Passer en Pour'}</button>` : ''}
+                    <button class="arg-node-action" onclick="argMapEditNode('${escHtml(block.id)}','${escHtml(node.id)}')">Modifier</button>
+                    ${node.role !== 'THESIS' ? `<button class="arg-node-action danger" onclick="argMapDeleteNode('${escHtml(block.id)}','${escHtml(node.id)}')">Suppr.</button>` : ''}
+                </div>
+            </div>`
+            : '';
+
+        const collapseBtn = hasChildren
+            ? `<button class="arg-node-collapse" onclick="argMapToggleNode('${escHtml(block.id)}','${escHtml(node.id)}')">${node.isCollapsed ? 'Déplier' : 'Replier'} (${node.children.length})</button>`
+            : '';
+
+        return `<div class="arg-node role-${node.role.toLowerCase()}"
+            style="left:${entry.x}px;top:${entry.y}px;--arg-role:${meta.color};"
+            data-node-id="${escHtml(node.id)}"
+            data-block-id="${escHtml(block.id)}"
+            ${canEdit && node.role !== 'THESIS' ? 'draggable="true"' : ''}
+            ${canEdit ? `ondragover="argMapAllowNodeDrop(event)" ondragenter="argMapEnterNodeDropTarget(event)" ondragleave="argMapLeaveNodeDropTarget(event)" ondrop="argMapDropNode(event)"` : ''}
+            ${canEdit && node.role !== 'THESIS' ? `ondragstart="argMapStartNodeDrag(event)" ondragend="argMapEndNodeDrag()"` : ''}>
+            <div class="arg-node-role">${meta.short} · ${meta.label}${canEdit && node.role !== 'THESIS' ? '<span class="arg-node-drag-hint"> Glisser pour deplacer</span>' : ''}</div>
+            ${thesisStanceBadge}
+            ${parentRelationBadge}
+            <div class="arg-node-content">${nodeContent}</div>
+            ${node.author ? `<div class="arg-node-author">— ${escHtml(node.author)}</div>` : ''}
+            ${sourceButtons ? `<div class="arg-node-links">${sourceButtons}</div>` : ''}
+            ${sourceText}
+            ${collapseBtn}
+            ${editControls}
+        </div>`;
+    }).join('');
+
+    return `<div class="block-argument-map">
+        <div class="argmap-header">
+            <div class="argmap-title-wrap">
+                <div class="argmap-title">🗺️ ${escHtml(block.title || 'Carte d\'argument interactive')}</div>
+                ${map.isExercise ? '<span class="argmap-badge">Mode exercice</span>' : ''}
+                <span class="argmap-tree-pill">Tree (style Kialo)</span>
+            </div>
+            ${canEdit ? `<div class="argmap-toolbar">
+                <button onclick="argMapEditNode('${escHtml(block.id)}','${escHtml(map.thesis.id)}')">Modifier la thèse</button>
+            </div>` : ''}
+        </div>
+
+        <div class="argmap-canvas-wrap">
+            <div class="argmap-canvas" style="width:${layout.width}px;height:${layout.height}px;">
+                <svg class="argmap-lines" viewBox="0 0 ${layout.width} ${layout.height}" preserveAspectRatio="none">
+                    ${lines}
+                </svg>
+                ${nodes}
+            </div>
+        </div>
+    </div>`;
+}
+
 export function updateCounter() {
-    const visible = state.blocks.filter(b => b.visible && b.type !== 'page-break').length;
-    const total   = state.blocks.filter(b => b.type !== 'page-break').length;
+    const revisionVisibleSet = state.mode === 'revision' ? getRevisionVisibleTypeSet() : null;
+    const isCounted = (block) => {
+        if (block.type === 'page-break') return false;
+        if (state.mode !== 'revision') return true;
+        if (!revisionVisibleSet) return true;
+        return revisionVisibleSet.has(block.type);
+    };
+    const visible = state.blocks.filter(b => isCounted(b) && b.visible).length;
+    const total   = state.blocks.filter(isCounted).length;
     document.getElementById('block-counter').textContent = `${total} blocs · ${visible} visibles`;
 }
 
